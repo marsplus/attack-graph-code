@@ -9,6 +9,7 @@ class Threat_Model(nn.Module):
         self.numNodes = len(G)
 
         self.S = S
+        # S_prime = V \ S
         self.S_prime = S_prime
         self.alpha_1, self.alpha_2, self.alpha_3 = Alpha
         self.budget = budget
