@@ -14,6 +14,7 @@ from scipy.sparse import linalg as splin
 import matplotlib.pyplot as plt
 
 
+
 mult = np.multiply
 
 
@@ -209,3 +210,6 @@ def spectrum_attack(graph, subgraph, alphas, learning_rate=0.1,
                       ii, utility, lambda1, lambda1_sub))
 
     return pd.DataFrame(rows, columns=['lambda', 'lambda_sub', 'centrality', 'utility']), adj
+
+
+
