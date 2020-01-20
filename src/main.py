@@ -24,10 +24,11 @@ S_prime = list(set(G.nodes()) - set(S))
 S = torch.LongTensor(S)
 S_prime = torch.LongTensor(S_prime)
 
-
+# haven't figured out how to take budget constraint into account
+budget = 0.1
 learning_rate = 1e-1
 Alpha = [alpha1, alpha2, alpha3]
-Attacker = Threat_Model(S, S_prime, Alpha, 0.1, learning_rate, G)
+Attacker = Threat_Model(S, S_prime, Alpha, budget, learning_rate, G)
 opt = torch.optim.Adam(Attacker.parameters(), lr=learning_rate)
 
 ret = {'lambda_1': [], 'lambda_1_S': [], 'centrality': []}
