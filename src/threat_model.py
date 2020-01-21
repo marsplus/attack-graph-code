@@ -11,12 +11,12 @@ class Threat_Model(nn.Module):
         self.S = S
         # S_prime = V \ S
         self.S_prime = S_prime
+        
         self.alpha_1, self.alpha_2, self.alpha_3 = Alpha
         self.budget = budget
         self.learning_rate = learning_rate
 
-        # haven't took budget constraint into account
-        self.used_budget = 0
+        self.used_budget = torch.zeros(1)
         
         self.lambda1_S_prime = 0
         self.lambda1_S = 0
@@ -25,13 +25,16 @@ class Threat_Model(nn.Module):
         
         adj = nx.adjacency_matrix(G).todense()
         self.mask = torch.tensor(adj, dtype=torch.float32)
-        eigVals, eigVecs = torch.symeig(self.mask, eigenvectors=True)
-        # eig-vector associated with the largest eig-value of A (since mask = A)
-        self.eig_v = eigVecs[:, -1]
-        self.original_lambda1 = eigVals[-1]
         
+        # eigenvals and eigenvectors associated with the largest eig-value of A (since mask = A)
+        eigVals, eigVecs = torch.symeig(self.mask, eigenvectors=True)
+        self.eig_v = eigVecs[:, -1]
+        self.lambda1_original = eigVals[-1]
+       
+        # optimizer
         self.adj_tensor = torch.tensor(adj, dtype=torch.float32).requires_grad_(True)
         self.adj_tensor = nn.Parameter(self.adj_tensor)
+        
         # masking the gradients backpropagated to adj_tensor
         self.adj_tensor.register_hook(lambda x: x * self.mask)
         
@@ -59,24 +62,36 @@ class Threat_Model(nn.Module):
         
         # centrality measure
         self.normalizedCut = torch.mm(x_s.view(1, -1), torch.mm(L, x_s.view(-1, 1))) / (0.5 * adj_tensor_S.sum())
+        
+        # loss function 
         Loss = -1 * (self.alpha_1 * self.lambda1_S - \
                      self.alpha_2 * self.lambda1_S_prime + self.alpha_3 * self.normalizedCut)
+        
         return Loss
-    
-    
-    # check if the attacker still has budget (haven't took budget constraint into account)
-    def update_used_budget(self):
-        # make sure the attacker has made some attack
-        if self.adj_tensor.grad != None:
-            current_used_budget = \
-                torch.abs(torch.mm(self.eig_v.view(1, -1), torch.mm(self.aggre_change, self.eig_v.view(-1, 1))))
-            self.used_budget += current_used_budget 
 
+    def get_budget(self):
+        return self.budget
     
+    # budget consumed in each step
+    def get_step_budget(self):
+        if self.adj_tensor.grad != None:
+            pert = self.adj_tensor.grad * self.learning_rate
+            step_budget = torch.max(torch.abs(torch.symeig(pert)[0]))
+            return step_budget
+
+    # update how much budget used
+    def update_used_budget(self, used_b):
+        self.used_budget += used_b
+
+    # return the amount of budget consumed
+    def get_used_budget(self):
+        return self.used_budget.clone()
+
     # return the results that we are interested in
     def getRet(self):
         return self.lambda1_S, self.lambda1, self.normalizedCut
+
+    # check budget constraint (for debug purpose)
+    def check_constraint(self):
+        return torch.abs(self.lambda1 - self.lambda1_original) <= self.budget
     
-    
-    def get_used_budget(self):
-        return torch.Tensor(self.used_budget).clone()

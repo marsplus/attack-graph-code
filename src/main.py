@@ -10,13 +10,11 @@ import torch
 np.random.seed(1)
 
 
-
-
 n = 128
 G = nx.watts_strogatz_graph(n, 10, 0.2)
 adj = nx.adjacency_matrix(G).todense()
 
-alpha1, alpha2, alpha3 = 0.4, 0.4, 0.2
+alpha1, alpha2, alpha3 = 0.6, 0, 0.4
 
 center = np.random.choice(range(G.order()))
 S = list(G.neighbors(center)) + [center]
@@ -25,15 +23,15 @@ S = torch.LongTensor(S)
 S_prime = torch.LongTensor(S_prime)
 
 # haven't figured out how to take budget constraint into account
-budget = 0.1
+budget = 1.5
 learning_rate = 1e-1
 Alpha = [alpha1, alpha2, alpha3]
 Attacker = Threat_Model(S, S_prime, Alpha, budget, learning_rate, G)
-opt = torch.optim.Adam(Attacker.parameters(), lr=learning_rate)
+opt = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
 
 ret = {'lambda_1': [], 'lambda_1_S': [], 'centrality': []}
 Losses = []
-for i in range(20):
+while True:
     Loss = Attacker()
     Losses.append(Loss.item())
     lambda1_S, lambda1, normalizedCut = Attacker.getRet()
@@ -43,6 +41,13 @@ for i in range(20):
 
     opt.zero_grad()
     Loss.backward()
-    opt.step()
-            
+
+    budget_this_step = Attacker.get_step_budget()
+    current_used_budget = Attacker.get_used_budget()
+    if current_used_budget + budget_this_step <= budget:
+        opt.step()
+        Attacker.update_used_budget(budget_this_step)
+    else:
+        break
+                
 ret = pd.DataFrame(ret)
