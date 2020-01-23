@@ -15,7 +15,7 @@ G = nx.watts_strogatz_graph(n, 10, 0.2)
 adj = nx.adjacency_matrix(G).todense()
 
 # trade-off parameters
-alpha1, alpha2, alpha3 = 0.5, 0.2, 0.3
+alpha1, alpha2, alpha3 = 0.5, 0.1, 0.4
 
 # randomly choose a subset of nodes, whose 
 # induced subgraph becomes the subgraph we 
@@ -80,6 +80,12 @@ while True:
 # *.numpy(): converts PyTorch tensor to numpy array
 # Attacker.get_attacked_adj(): returns a PyTorch tensor 
 attacked_adj = Attacker.get_attacked_adj().detach().numpy()
+
+# check if the budget constraint is actually satisfied
+if Attacker.check_constraint():
+    print("Budget constraint satisfied\n")
+else:
+    print("Violate budget constraint\n")
 
 # for plotting purposes         
 ret = pd.DataFrame(ret)

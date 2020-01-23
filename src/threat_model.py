@@ -72,7 +72,7 @@ class Threat_Model(nn.Module):
         # centrality measure
         # torch.mm(): do matrix multiplication
         # x_s.view(1, -1): convert x_s to a row vector
-        normalization_const = (0.5 * adj_tensor_S.sum())
+        normalization_const = torch.mm(x_s.view(1, -1), torch.mm(D, x_s.view(-1, 1))) 
         self.normalizedCut = torch.mm(x_s.view(1, -1), torch.mm(L, x_s.view(-1, 1))) / normalization_const
         
         # loss function (the negative of U_a)
