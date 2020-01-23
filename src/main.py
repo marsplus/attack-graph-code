@@ -36,6 +36,8 @@ Attacker = Threat_Model(S, S_prime, Alpha, budget, learning_rate, G)
 
 # define an optimizer to solve our optimization problem
 # Attacker.parameters() tells the optimizer what we wanna optimize
+# Note: we use SGD optimizer here. Using other optimizers (e.g., Adam) 
+# may cause unexpected issues.
 opt = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
 
 # stores the experimental results
