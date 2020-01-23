@@ -54,6 +54,7 @@ while True:
 
     # opt.zero_grad(): clear accumulated gradients in the last step
     # Loss.backward(): compute the gradient of the Loss w.r.t the optimizer (the adjacency matrix in our case)
+    # A correct order to run the optimizer: opt.zero_grad() -> Loss.backward() -> opt.step()
     opt.zero_grad()
     Loss.backward()
 
