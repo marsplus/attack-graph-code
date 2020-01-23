@@ -72,6 +72,10 @@ while True:
     else:
         break
 
+# this converts self.adj_tensor to a numpy array
+# *.detach(): tells PyTorch no need to track the gradients
+# *.numpy(): converts PyTorch tensor to numpy array
+# Attacker.get_attacked_adj(): returns a PyTorch tensor 
 attacked_adj = Attacker.get_attacked_adj().detach().numpy()
 
 # for plotting purposes         
