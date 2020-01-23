@@ -106,6 +106,9 @@ class Threat_Model(nn.Module):
 
     def getRet(self):
         return self.lambda1_S, self.lambda1, self.normalizedCut
+    
+    def get_attacked_adj(self):
+        return self.adj_tensor
 
     # check budget constraint (for debug purpose)
     def check_constraint(self):

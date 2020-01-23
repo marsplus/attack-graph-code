@@ -72,6 +72,7 @@ while True:
     else:
         break
 
+attacked_adj = Attacker.get_attacked_adj().detach().numpy()
 
 # for plotting purposes         
 ret = pd.DataFrame(ret)
