@@ -72,5 +72,6 @@ while True:
     else:
         break
 
+
 # for plotting purposes         
 ret = pd.DataFrame(ret)
