@@ -12,10 +12,14 @@ np.random.seed(1)
 # generate synthetic network structures, for simulation purposes
 n = 128
 G = nx.watts_strogatz_graph(n, 10, 0.2)
+#G = nx.barabasi_albert_graph(n, 3)
+# G = nx.barabasi_albert_graph(size, 4)
+# G = hyperbolic_graph(size, 5, 2.8)
+# G = kronecker_graph(size, 0.05)
 adj = nx.adjacency_matrix(G).todense()
 
 # trade-off parameters
-alpha1, alpha2, alpha3 = 0.5, 0.1, 0.4
+alpha1, alpha2, alpha3 = 0.3, 0.05, 0.65
 
 # randomly choose a subset of nodes, whose 
 # induced subgraph becomes the subgraph we 
@@ -29,7 +33,7 @@ S = torch.LongTensor(S)
 S_prime = torch.LongTensor(S_prime)
 
 # those input parameters as in Algorithm 1 in the write-up
-budget = 2
+budget = 1.5
 learning_rate = 1e-1
 Alpha = [alpha1, alpha2, alpha3]
 Attacker = Threat_Model(S, S_prime, Alpha, budget, learning_rate, G)

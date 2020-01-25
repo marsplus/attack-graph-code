@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import torch.nn as nn
 import networkx as nx
 
@@ -7,6 +8,7 @@ class Threat_Model(nn.Module):
     def __init__(self, S, S_prime, Alpha, budget, learning_rate, G):
         super(Threat_Model, self).__init__()
         self.numNodes = len(G)
+        self.avgDeg = np.mean([G.degree(i) for i in range(self.numNodes)])
 
         self.S = S
         self.S_prime = S_prime
@@ -53,10 +55,12 @@ class Threat_Model(nn.Module):
         # Laplacian matrix
         L = D - self.adj_tensor
 
-        # characteristic vector for the set S
+        # characteristic vector for sets S and S_prime
         x_s = torch.zeros(self.numNodes)
         x_s[self.S] = 1
-    
+        x_s_prime = torch.zeros(self.numNodes)
+        x_s_prime[self.S_prime] = 1
+
         # select the sub adjacency matrix corresponding to S and S_prime
         adj_tensor_S = torch.index_select(torch.index_select(self.adj_tensor, 0, self.S), 1, self.S)
         adj_tensor_S_prime = torch.index_select(torch.index_select(self.adj_tensor, 0, self.S_prime), 1, self.S_prime)
@@ -70,23 +74,32 @@ class Threat_Model(nn.Module):
         self.lambda1_S_prime = torch.max(torch.symeig(adj_tensor_S_prime, eigenvectors=True)[0])
         
         # centrality measure
-        # torch.mm(): do matrix multiplication
+        # torch.mm(): matrix multiplication
         # x_s.view(1, -1): convert x_s to a row vector
-        normalization_const = torch.mm(x_s.view(1, -1), torch.mm(D, x_s.view(-1, 1))) 
-        self.normalizedCut = torch.mm(x_s.view(1, -1), torch.mm(L, x_s.view(-1, 1))) / normalization_const
+        vol_S = torch.mm(x_s.view(1, -1), torch.mm(D, x_s.view(-1, 1)))
+        vol_S_prime = torch.mm(x_s_prime.view(1, -1), torch.mm(D, x_s_prime.view(-1, 1)))
+        normalization_const = 1 / vol_S + 1 / vol_S_prime 
+        cut_size = torch.mm(x_s.view(1, -1), torch.mm(L, x_s.view(-1, 1)))
+        self.normalizedCut = cut_size * normalization_const
+        print("Cut size: {:.4f}    vol(S): {:.4f}    vol(S_prime): {:.4f}    norm_const: {:.4f}".format(cut_size.item(), vol_S.item(), vol_S_prime.item(), normalization_const.item()))
         
         # loss function (the negative of U_a)
         # since we defined self.adj_tensor as a parameter, PyTorch automatically tracks 
         # the functional relation between Loss and self.adj_tensor, and correspondingly computes derivatives
         # of Loss w.r.t self.adj_tensor 
-        Loss = -1 * (self.alpha_1 * self.lambda1_S - \
-                     self.alpha_2 * self.lambda1_S_prime + self.alpha_3 * self.normalizedCut)
-        
+        U1 = self.alpha_1 * self.lambda1_S / self.avgDeg
+        U2 = -1 * self.alpha_2 * self.lambda1_S_prime / self.avgDeg
+        U3 = self.alpha_3 * self.normalizedCut
+        #print("1st term: {:.4f}    2nd term: {:.4f}    3rd term: {:.4f}".format(U1.item(), U2.item(), U3.item()))
+
+        Loss = -1 * (U1 + U2 + U3)
         return Loss
+
 
     def get_budget(self):
         return self.budget
     
+
     # budget consumed in each step
     def get_step_budget(self):
         if self.adj_tensor.grad != None:
@@ -96,19 +109,24 @@ class Threat_Model(nn.Module):
             step_budget = torch.max(torch.abs(torch.symeig(pert)[0]))
             return step_budget
 
+
     # update how much budget used
     def update_used_budget(self, used_b):
         self.used_budget += used_b
+
 
     # return the amount of budget consumed
     def get_used_budget(self):
         return self.used_budget.clone()
 
+
     def getRet(self):
         return self.lambda1_S, self.lambda1, self.normalizedCut
+
     
     def get_attacked_adj(self):
         return self.adj_tensor.clone()
+
 
     # check budget constraint (for debug purpose)
     def check_constraint(self):
