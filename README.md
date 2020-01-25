@@ -11,4 +11,5 @@ You need **Python3.7** and conda to install required packages.
 3. After the environment is activated, install the following required packages:
    ```
    conda install numpy scipy networkx pandas matplotlib ipython jupyter
+   conda install pytorch torchvision -c pytorch
    ```
