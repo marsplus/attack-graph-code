@@ -5,7 +5,7 @@ import networkx as nx
 
 
 class Threat_Model(nn.Module):
-    def __init__(self, S, S_prime, Alpha, budget, learning_rate, G):
+    def __init__(self, S, S_prime, Alpha, budget_change_ratio, learning_rate, G):
         super(Threat_Model, self).__init__()
         self.numNodes = len(G)
         self.avgDeg = np.mean([G.degree(i) for i in range(self.numNodes)])
@@ -14,7 +14,6 @@ class Threat_Model(nn.Module):
         self.S_prime = S_prime
         
         self.alpha_1, self.alpha_2, self.alpha_3 = Alpha
-        self.budget = budget
         self.learning_rate = learning_rate
 
         # tracks the amount of budget used
@@ -25,6 +24,7 @@ class Threat_Model(nn.Module):
         self.lambda1_S = 0
         self.normalizedCut = 0
         self.lambda1 = 0
+        self.Loss = 0
         
         # the pristine adjacency matrix
         adj = nx.adjacency_matrix(G).todense()
@@ -36,6 +36,9 @@ class Threat_Model(nn.Module):
         eigVals, eigVecs = torch.symeig(self.mask, eigenvectors=True)
         self.eig_v = eigVecs[:, -1]
         self.lambda1_original = eigVals[-1]
+
+        # |lambda1(\tilde{A})-lambda1(A)| <= lambda1(A) * budget_change_ratio
+        self.budget = self.lambda1_original * budget_change_ratio
        
         # the thing we wanna optimize
         # requires_grad_(True): tells PyTorch to starting tracking the gradients of this parameter
@@ -45,6 +48,7 @@ class Threat_Model(nn.Module):
         
         # masking the gradients backpropagated to adj_tensor
         self.adj_tensor.register_hook(lambda x: x * self.mask)
+
         
     def forward(self):
         """
@@ -81,7 +85,7 @@ class Threat_Model(nn.Module):
         normalization_const = 1 / vol_S + 1 / vol_S_prime 
         cut_size = torch.mm(x_s.view(1, -1), torch.mm(L, x_s.view(-1, 1)))
         self.normalizedCut = cut_size * normalization_const
-        print("Cut size: {:.4f}    vol(S): {:.4f}    vol(S_prime): {:.4f}    norm_const: {:.4f}".format(cut_size.item(), vol_S.item(), vol_S_prime.item(), normalization_const.item()))
+        # print("Cut size: {:.4f}    vol(S): {:.4f}    vol(S_prime): {:.4f}    norm_const: {:.4f}".format(cut_size.item(), vol_S.item(), vol_S_prime.item(), normalization_const.item()))
         
         # loss function (the negative of U_a)
         # since we defined self.adj_tensor as a parameter, PyTorch automatically tracks 
@@ -92,8 +96,8 @@ class Threat_Model(nn.Module):
         U3 = self.alpha_3 * self.normalizedCut
         #print("1st term: {:.4f}    2nd term: {:.4f}    3rd term: {:.4f}".format(U1.item(), U2.item(), U3.item()))
 
-        Loss = -1 * (U1 + U2 + U3)
-        return Loss
+        self.Loss = -1 * (U1 + U2 + U3)
+        return self.Loss
 
 
     def get_budget(self):
@@ -127,8 +131,12 @@ class Threat_Model(nn.Module):
     def get_attacked_adj(self):
         return self.adj_tensor.clone()
 
+    def get_utility(self):
+        return -1 * self.Loss
 
     # check budget constraint (for debug purpose)
     def check_constraint(self):
         return torch.abs(self.lambda1 - self.lambda1_original) <= self.budget
+
+
     
