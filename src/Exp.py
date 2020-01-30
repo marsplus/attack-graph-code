@@ -20,6 +20,7 @@ parser.add_argument('--graph_type', type=str, default='BA',
 
 args = parser.parse_args() 
 
+
 # check if there any hub in the graph
 def exist_hubs(graph):
     maxDegreeNode = max(dict(graph.degree()), key=lambda x: dict(graph.degree())[x])
@@ -31,13 +32,15 @@ def exist_hubs(graph):
     else:
         return (False, None)
 
-
+# run a community detection algorithm, then
+# randomly pick one community as S
 def select_comm(graph):
     comm = list(np.random.choice(list(greedy_modularity_communities(graph))))
     assert(len(comm) != 0)
     return comm
 
 
+# generate synthetic graphs
 def gen_graph(graph_type):
     if graph_type == 'BA':
         G = nx.barabasi_albert_graph(n, 3)
@@ -64,6 +67,7 @@ def gen_graph(graph_type):
     return G
 
 
+# execute the attack
 def exec_attack():
     lambda1_S_tmp = []
     centrality_tmp = []
@@ -101,12 +105,17 @@ def exec_attack():
     return (lambda1_S_increase_ratio, centrality_increase_ratio, utility)
 
 
-# parameters
+
+# parameters for running experiments
 n = 375
-alpha_1, alpha_2, alpha_3 = 0, 0, 1
+alpha_1, alpha_2, alpha_3 = 0.3, 0.1, 0.6
 Alpha = [alpha_1, alpha_2, alpha_3]
 learning_rate = 0.1
 
+
+# generate the graphs
+# each randomly generated graph is associated with 
+# a randomly picked set S
 graph_data = []
 for i in range(args.numExp):
     G = gen_graph(args.graph_type)
@@ -120,18 +129,15 @@ for i in range(args.numExp):
     S_prime = list(set(G.nodes()) - set(S))
     S = torch.LongTensor(S)
     S_prime = torch.LongTensor(S_prime)
-
     graph_data.append((G, adj, S, S_prime))
 
 
+# run the attack, with varying budgets
 result = []
 for budget_change_ratio in [0.01, 0.05, 0.1, 0.15, 0.2]:
 # for budget_change_ratio in [0.1]:
     for exp in range(args.numExp):
         G, adj, S, S_prime = graph_data[exp]
-
-        #alpha_1, alpha_2, alpha_3 = get_alpha(adj, S, S_prime)
-        #print("a1: {:.4f}      a2: {:.4f}      a3: {:.4f}".format(alpha_1.item(), alpha_2.item(), alpha_3.item()))
 
         Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G)
         Attacker_budget = Attacker.get_budget()
