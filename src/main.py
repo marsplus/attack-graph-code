@@ -55,7 +55,7 @@ Losses = []
 
 # implement Algorithm 1 in the write-up
 stats = []
-for i in range(100):
+for i in range(1):
     while True:
         Loss = Attacker()
         Losses.append(Loss.item())

@@ -9,6 +9,7 @@ class Threat_Model(nn.Module):
         super(Threat_Model, self).__init__()
         self.numNodes = len(G)
         self.avgDeg = np.mean([G.degree(i) for i in range(self.numNodes)])
+        self.maxDeg = np.max(list(dict(G.degree).values()))
 
         self.S = S
         self.S_prime = S_prime
@@ -33,6 +34,7 @@ class Threat_Model(nn.Module):
         # eigenvals and eigenvectors associated with the largest eig-value of adj (since mask = adj)
         # the eigenvalues returned by torch.symeig() are in ascending order
         # so the last one is the largest eigenvalue we want 
+        # Note: each column of eigVecs is an eigen-vector
         eigVals, eigVecs = torch.symeig(self.mask, eigenvectors=True)
         self.eig_v = eigVecs[:, -1]
         self.lambda1_original = eigVals[-1]
@@ -93,11 +95,20 @@ class Threat_Model(nn.Module):
         # of Loss w.r.t self.adj_tensor 
         U1 = self.alpha_1 * self.lambda1_S / self.avgDeg
         U2 = -1 * self.alpha_2 * self.lambda1_S_prime / self.avgDeg
+        # U3 = self.alpha_3 * self.subgraph_centrality()
         U3 = self.alpha_3 * self.normalizedCut
-        #print("1st term: {:.4f}    2nd term: {:.4f}    3rd term: {:.4f}".format(U1.item(), U2.item(), U3.item()))
+        # print("1st term: {:.4f}    2nd term: {:.4f}    3rd term: {:.4f}".format(U1.item(), U2.item(), U3.item()))
 
         self.Loss = -1 * (U1 + U2 + U3)
         return self.Loss
+
+
+    def subgraph_centrality(self):
+        eigVals, eigVecs = torch.symeig(self.adj_tensor, eigenvectors=True)
+        eigVals_exp = torch.diag(torch.exp(eigVals))
+        subgraph_cent = torch.diag(torch.mm(eigVecs, torch.mm(eigVals_exp, torch.transpose(eigVecs, 0, 1))))
+        C = subgraph_cent[self.S].sum()
+        return C
 
 
     def get_budget(self):
@@ -139,4 +150,3 @@ class Threat_Model(nn.Module):
         return torch.abs(self.lambda1 - self.lambda1_original) <= self.budget
 
 
-    
