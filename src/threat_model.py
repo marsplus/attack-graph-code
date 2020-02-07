@@ -49,9 +49,10 @@ class Threat_Model(nn.Module):
         self.adj_tensor = nn.Parameter(self.adj_tensor)
         
         # masking the gradients backpropagated to adj_tensor
-        self.adj_tensor.register_hook(lambda x: x * self.mask)
+        # make sure the perturbation added to the adjacency matrix is symmetric
+        self.adj_tensor.register_hook(lambda x: (1/2) * (x + torch.transpose(x, 0, 1)) * self.mask)
 
-        
+
     def forward(self):
         """
             Compute loss given current (perturbed) adjacency matrix
@@ -111,6 +112,14 @@ class Threat_Model(nn.Module):
         return C
 
 
+    def get_Laplacian(self):
+        # degree matrix
+        D = torch.diag(torch.mm(self.adj_tensor, torch.ones(self.numNodes).view(-1, 1)).squeeze())
+        # Laplacian matrix
+        L = D - self.adj_tensor
+        return L.detach().clone()
+
+
     def get_budget(self):
         return self.budget
     
@@ -140,10 +149,12 @@ class Threat_Model(nn.Module):
 
     
     def get_attacked_adj(self):
-        return self.adj_tensor.clone()
+        return self.adj_tensor.detach().clone()
+
 
     def get_utility(self):
         return -1 * self.Loss
+
 
     # check budget constraint (for debug purpose)
     def check_constraint(self):

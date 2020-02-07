@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import pandas as pd
 import networkx as nx
+from scipy import stats
 import matplotlib.pylab as plt
 from threat_model import Threat_Model
 from spectrum_attack import spectrum_attack
@@ -21,6 +22,35 @@ parser.add_argument('--graph_type', type=str, default='BA',
 args = parser.parse_args() 
 
 
+# record original and attacked degree distributionis
+def get_degree_dist_and_spectrum():
+    A = torch.tensor(adj, dtype=torch.float32)
+    D = torch.diag(torch.mm(A, torch.ones(len(A)).view(-1, 1)).squeeze())
+    L = D - A
+
+    attacked_L = Attacker.get_Laplacian()
+    attacked_A = Attacker.get_attacked_adj()
+    attacked_D = attacked_L + attacked_A
+
+    degs = torch.diag(D).numpy()
+    attacked_degs = torch.diag(attacked_D).numpy()
+    data_degs = pd.DataFrame([degs, attacked_degs]).transpose()
+
+    eigVals_A, _ = torch.symeig(A, eigenvectors=True)
+    attacked_eigVals_A, _ = torch.symeig(attacked_A, eigenvectors=True)
+    eigVals_A = eigVals_A.numpy()
+    attacked_eigVals_A = attacked_eigVals_A.numpy()
+    data_eig_A = pd.DataFrame([eigVals_A, attacked_eigVals_A]).transpose()
+
+    eigVals_L, _ = torch.symeig(L, eigenvectors=True)
+    attacked_eigVals_L, _ = torch.symeig(attacked_L, eigenvectors=True)
+    eigVals_L = eigVals_L.numpy()
+    attacked_eigVals_L = attacked_eigVals_L.numpy()
+    data_eig_L = pd.DataFrame([eigVals_L, attacked_eigVals_L]).transpose()
+
+    return (data_degs, data_eig_A, data_eig_L)
+
+
 # check if there any hub in the graph
 def exist_hubs(graph):
     maxDegreeNode = max(dict(graph.degree()), key=lambda x: dict(graph.degree())[x])
@@ -32,10 +62,15 @@ def exist_hubs(graph):
     else:
         return (False, None)
 
+
 # run a community detection algorithm, then
-# randomly pick one community as S
+# randomly pick one community as S. 
+# note that the size of S is usually less than 100
 def select_comm(graph):
-    comm = list(np.random.choice(list(greedy_modularity_communities(graph))))
+    all_comms = list(greedy_modularity_communities(graph))
+    comm = list(np.random.choice(all_comms))
+    #while len(comm) > 100:
+    #    comm = list(np.random.choice(all_comms))
     assert(len(comm) != 0)
     return comm
 
@@ -120,7 +155,7 @@ graph_data = []
 for i in range(args.numExp):
     G = gen_graph(args.graph_type)
     assert(nx.is_connected(G))
-    adj = nx.adjacency_matrix(G).todense()
+    adjacency_matrix = nx.adjacency_matrix(G).todense()
 
     # center = np.random.choice(range(G.order()))
     # S = list(G.neighbors(center)) + [center]
@@ -129,13 +164,29 @@ for i in range(args.numExp):
     S_prime = list(set(G.nodes()) - set(S))
     S = torch.LongTensor(S)
     S_prime = torch.LongTensor(S_prime)
-    graph_data.append((G, adj, S, S_prime))
+    graph_data.append((G, adjacency_matrix, S, S_prime))
 
+
+budget_to_string = {
+    0.01: '1%',
+    0.05: '5%',
+    0.1:  '10%',
+    0.15: '15%',
+    0.2:  '20%'
+}
 
 # run the attack, with varying budgets
 result = []
+Deg_dist_result = {0.01: None, 0.05: None, 0.1: None, 0.15: None, 0.2: None}
+eig_adj_result = {0.01: None, 0.05: None, 0.1: None, 0.15: None, 0.2: None}
+eig_laplacian_result = {0.01: None, 0.05: None, 0.1: None, 0.15: None, 0.2: None}
+
 for budget_change_ratio in [0.01, 0.05, 0.1, 0.15, 0.2]:
-# for budget_change_ratio in [0.1]:
+#for budget_change_ratio in [0.01]:
+    Deg_dist = pd.DataFrame()
+    eig_adj = pd.DataFrame()
+    eig_laplacian = pd.DataFrame()
+
     for exp in range(args.numExp):
         G, adj, S, S_prime = graph_data[exp]
 
@@ -148,14 +199,41 @@ for budget_change_ratio in [0.01, 0.05, 0.1, 0.15, 0.2]:
         S_size = len(S)
         d_avg_S = np.mean([G.degree(i) for i in S.numpy()])
 
-        result.append((lambda1_ret, centrality_ret, utility_ret, S_size, d_avg_S, graph_size, budget_change_ratio))
-        print("Budget: {:.2f}%    Exp: {}    lambda1_increase_ratio: {:.4f}%    centrality_increase_ratio: {:.4f}%    \
-               utility: {}\n"
-            .format(budget_change_ratio*100, exp, lambda1_ret*100, centrality_ret*100, utility_ret))
+        # concatenate degree distribution
+        deg_d, eig_A, eig_L = get_degree_dist_and_spectrum()
+        deg_d.columns = ['original', 'attacked']
+        if_detected = stats.ttest_ind(deg_d['original'], deg_d['attacked'])[1] <= 0.05
+        # Deg_dist = pd.concat([Deg_dist, deg_d])
+        # eig_adj  = pd.concat([eig_adj, eig_A])
+        # eig_laplacian = pd.concat([eig_laplacian, eig_L])
+
+        result.append((lambda1_ret, centrality_ret, utility_ret, S_size, d_avg_S, graph_size, if_detected, budget_change_ratio))
+        print("Budget: {:.2f}%    Exp: {}    lambda1_increase_ratio: {:.4f}%    centrality_increase_ratio: {:.4f}%    utility: {}    if_detected: {}\n".format(\
+                budget_change_ratio*100, exp, lambda1_ret*100, centrality_ret*100, utility_ret, if_detected))
+    # Deg_dist.index = range(len(Deg_dist))
+    # Deg_dist.columns = ['original', 'attacked']
+    # Deg_dist_result[budget_change_ratio] = Deg_dist
+
+    # eig_adj.index = range(len(eig_adj))
+    # eig_adj.columns = ['original', 'attacked']
+    # eig_adj_result[budget_change_ratio] = eig_adj
+
+    # eig_laplacian.index = range(len(eig_laplacian))
+    # eig_laplacian.columns = ['original', 'attacked']
+    # eig_laplacian_result[budget_change_ratio] = eig_laplacian
     print('*' * 80)
 
 
-# with open('../result/{}_30-10-60_numExp_{}.p'.format(args.graph_type, args.numExp), 'wb') as fid:
-#     pickle.dump(result, fid)
+with open('../result/{}_30-10-60_numExp_{}.p'.format(args.graph_type, args.numExp), 'wb') as fid:
+    pickle.dump(result, fid)
+
+# with open('../result/{}_30-10-60_numExp_{}_Deg_distribution.p'.format(args.graph_type, args.numExp), 'wb') as fid:
+#     pickle.dump(Deg_dist_result, fid)
+
+# with open('../result/{}_30-10-60_numExp_{}_adj_spectrum.p'.format(args.graph_type, args.numExp), 'wb') as fid:
+#     pickle.dump(eig_adj_result, fid)
+
+# with open('../result/{}_30-10-60_numExp_{}_laplacian_spectrum.p'.format(args.graph_type, args.numExp), 'wb') as fid:
+#     pickle.dump(eig_laplacian_result, fid)
 
 
