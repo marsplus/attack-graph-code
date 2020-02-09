@@ -28,22 +28,18 @@ A = np.array([[0, 1, 1], [1, 0, 0], [1, 0, 0]])
 L_A = LIN.eig(A)[0].max()
 
 B = np.array([[0, 1.15, 1.6], [1.15, 0, 0], [1.6, 0, 0]])
+L_B = LIN.eig(B)[0].max()
+
 C = np.array([[0, 0.6, 0.6], [0.6, 0, 0], [0.6, 0, 0]])
+L_C = LIN.eig(C)[0].max()
+
 D = Lambda * B + (1 - Lambda) * C
 L_D = LIN.eig(D)[0].max()
 
-# B = np.multiply(A + np.random.rand(3,3), A)
-# B = (B + B.T) / 2
-# L_B = LIN.eig(B)[0].max()
 
-# C = np.abs(np.multiply(A + np.random.normal() * np.ones((3,3)), A))
-# C = (C + C.T) / 2
-# L_C = LIN.eig(C)[0].max()
-
-# D = Lambda * B + (1 - Lambda) * C
-# L_D = LIN.eig(D)[0].max()
-
-print(L_D, L_A)
+print("|L_A - L_C|: {:.4f}".format(np.abs(L_A - L_C)))
+print("|L_A - L_B|: {:.4f}".format(np.abs(L_A - L_B)))
+print("|L_A - L_D|: {:.4f}".format(np.abs(L_A - L_D)))
 
 
 
