@@ -7,3 +7,4 @@ bin/hgg
 writeups/paper
 src/.ipynb_checkpoints*
 src/flycheck*
+result/*
