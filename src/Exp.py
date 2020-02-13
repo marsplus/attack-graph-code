@@ -24,7 +24,7 @@ parser.add_argument('--graph_type', type=str, default='BA',
 parser.add_argument('--Alpha_id', type=int, default=1,
                     help='which set of parameters to use')
 
-args = parser.parse_args() 
+args = parser.parse_args()
 
 
 # record original and attacked degree distributionis
@@ -57,7 +57,7 @@ def get_degree_dist_and_spectrum():
 
 
 # run a community detection algorithm, then
-# randomly pick one community as S. 
+# randomly pick one community as S.
 # note that the size of S is usually less than 100
 def select_comm(graph):
     all_comms = list(greedy_modularity_communities(graph))
@@ -74,7 +74,7 @@ def select_comm(graph):
 # generate synthetic graphs
 def gen_graph(graph_type):
     if graph_type == 'BA':
-        G = nx.barabasi_albert_graph(n, 3)
+        G = nx.barabasi_albert_graph(n, 5)
     elif graph_type == 'Small-World':
         G = nx.watts_strogatz_graph(n, 10, 0.2)
     elif graph_type == 'Email':
@@ -127,7 +127,7 @@ def exec_attack_SGD():
     #     Sigma_proj = L_inf_proj(Sigma, Attacker.get_budget())
     #     Delta_proj = U @ torch.diag(Sigma_proj) @ V.T
     #     # compute results after projection
-    #     Attacker.adj_tensor.data = Attacker.original_adj + Delta_proj  
+    #     Attacker.adj_tensor.data = Attacker.original_adj + Delta_proj
 
     Attacker()
     lambda1_S, lambda1, centrality = Attacker.getRet()
@@ -135,10 +135,10 @@ def exec_attack_SGD():
     centrality_increase_ratio = (centrality - centrality_0) / centrality_0
     utility = Attacker.get_utility()
 
-    return (lambda1_S_increase_ratio.detach().numpy().squeeze(), 
+    return (lambda1_S_increase_ratio.detach().numpy().squeeze(),
             centrality_increase_ratio.detach().numpy().squeeze(),
-            utility.detach().numpy().squeeze())  
-    
+            utility.detach().numpy().squeeze())
+
     return (lambda1_S_increase_ratio, centrality_increase_ratio, utility)
 
 
@@ -148,7 +148,7 @@ def exec_attack_Projection():
     Attacker()
     lambda1_S_0, lambda1_0, centrality_0 = Attacker.getRet()
 
-    # optimize until some weights are about to 
+    # optimize until some weights are about to
     # become negative
     while torch.all(Attacker.adj_tensor >= 0):
     # for i in range(100):
@@ -156,7 +156,7 @@ def exec_attack_Projection():
         opt_Adam.zero_grad()
         Loss.backward()
         opt_Adam.step()
-    
+
     if not Attacker.check_constraint():
         print("start projection\n")
         # projection step
@@ -175,7 +175,7 @@ def exec_attack_Projection():
     centrality_increase_ratio = (centrality - centrality_0) / centrality_0
     utility = Attacker.get_utility()
 
-    return (lambda1_S_increase_ratio.detach().numpy().squeeze(), 
+    return (lambda1_S_increase_ratio.detach().numpy().squeeze(),
             centrality_increase_ratio.detach().numpy().squeeze(),
             utility.detach().numpy().squeeze())
 
@@ -195,7 +195,7 @@ learning_rate = 0.01
 
 
 # generate the graphs
-# each randomly generated graph is associated with 
+# each randomly generated graph is associated with
 # a randomly picked set S
 graph_data = []
 if args.graph_type == 'Facebook':
@@ -245,7 +245,7 @@ elif args.graph_type == 'Email':
         S_prime = list(set(G.nodes()) - set(S))
         S = torch.LongTensor(S)
         S_prime = torch.LongTensor(S_prime)
-        graph_data.append((G, adjacency_matrix, S, S_prime))   
+        graph_data.append((G, adjacency_matrix, S, S_prime))
 else:
     for i in range(args.numExp):
         G = gen_graph(args.graph_type)
@@ -303,7 +303,7 @@ for budget_change_ratio in [0.01, 0.05, 0.1, 0.15, 0.2]:
             continue
         print("Time: {:.4f}".format(time.time() - t1))
 
-        graph_size = len(G) 
+        graph_size = len(G)
         S_size = len(S)
         d_avg_S = np.mean([G.degree(i) for i in S.numpy()])
 
@@ -345,5 +345,3 @@ with open('../result/{}_{}_numExp_{}_adj_spectrum.p'.format(args.graph_type, "mi
 
 with open('../result/{}_{}_numExp_{}_laplacian_spectrum.p'.format(args.graph_type, "middle-quantile", args.numExp), 'wb') as fid:
     pickle.dump(eig_laplacian_result, fid)
-
-
