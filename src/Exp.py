@@ -202,7 +202,6 @@ if args.graph_type == 'Facebook':
     G = gen_graph(args.graph_type)
     assert(nx.is_connected(G))
     adjacency_matrix = nx.adjacency_matrix(G).todense()
-
     all_comms = list(greedy_modularity_communities(G))
     # all_comms = [item for item in all_comms if len(item) > 200 and len(item) < 300]
     # all_comms = [item for item in all_comms if len(item) == 37]
@@ -217,6 +216,7 @@ if args.graph_type == 'Facebook':
         S = torch.LongTensor(S)
         S_prime = torch.LongTensor(S_prime)
         graph_data.append((G, adjacency_matrix, S, S_prime))
+
 elif args.graph_type == 'Email':
     G = gen_graph(args.graph_type)
     mapping = {item: idx for idx, item in enumerate(G.nodes())}
@@ -227,7 +227,6 @@ elif args.graph_type == 'Email':
     # read into community info
     with open('../data/email-Eu-core-department-labels-cc.txt', 'r') as fid:
         f_label = fid.readlines()
-
     comm_to_nodes = {}
     for item in f_label:
         nodeID, commID = [int(i) for i in item.rstrip().split()]
@@ -260,90 +259,90 @@ else:
 
 
 
-budget_to_string = {
-    0.01: '1%',
-    0.05: '5%',
-    0.1:  '10%',
-    0.15: '15%',
-    0.2:  '20%'
-}
+# budget_to_string = {
+#     0.01: '1%',
+#     0.05: '5%',
+#     0.1:  '10%',
+#     0.15: '15%',
+#     0.2:  '20%'
+# }
 
-Alpha_to_string = {
-    1: '30-10-60',
-    2: '40-10-50',
-    3: '45-10-45',
-    4: '1-0-99',
-}
-
-
-# run the attack, with varying budgets
-result = []
-Deg_dist_result = {0.01: None, 0.05: None, 0.1: None, 0.15: None, 0.2: None}
-eig_adj_result = {0.01: None, 0.05: None, 0.1: None, 0.15: None, 0.2: None}
-eig_laplacian_result = {0.01: None, 0.05: None, 0.1: None, 0.15: None, 0.2: None}
-
-for budget_change_ratio in [0.01, 0.05, 0.1, 0.15, 0.2]:
-# for budget_change_ratio in [0.1]:
-    Deg_dist = pd.DataFrame()
-    eig_adj = pd.DataFrame()
-    eig_laplacian = pd.DataFrame()
-
-    for exp in range(args.numExp):
-        G, adj, S, S_prime = graph_data[exp]
-
-        Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G)
-        opt_Adam = torch.optim.Adam(Attacker.parameters(), lr=learning_rate)
-        #opt_SGD = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
-
-        t1 = time.time()
-        try:
-            lambda1_ret, centrality_ret, utility_ret = exec_attack_Projection()
-        except:
-            print("Cannot execute attack\n")
-            continue
-        print("Time: {:.4f}".format(time.time() - t1))
-
-        graph_size = len(G) 
-        S_size = len(S)
-        d_avg_S = np.mean([G.degree(i) for i in S.numpy()])
-
-        # concatenate degree distribution
-        deg_d, eig_A, eig_L = get_degree_dist_and_spectrum()
-        deg_d.columns = ['original', 'attacked']
-        if_detected = stats.ttest_ind(deg_d['original'], deg_d['attacked'])[1] <= 0.05
-        Deg_dist = pd.concat([Deg_dist, deg_d])
-        eig_adj  = pd.concat([eig_adj, eig_A])
-        eig_laplacian = pd.concat([eig_laplacian, eig_L])
-
-        result.append((lambda1_ret, centrality_ret, utility_ret, S_size, d_avg_S, graph_size, if_detected, budget_change_ratio))
-        print("Budget: {:.2f}%    Exp: {}    lambda1_increase_ratio: {:.4f}%    centrality_increase_ratio: {:.4f}%    utility: {}    if_detected: {}\n".format(\
-                budget_change_ratio*100, exp, lambda1_ret*100, centrality_ret*100, utility_ret, if_detected))
-
-    Deg_dist.index = range(len(Deg_dist))
-    Deg_dist.columns = ['original', 'attacked']
-    Deg_dist_result[budget_change_ratio] = Deg_dist
-
-    eig_adj.index = range(len(eig_adj))
-    eig_adj.columns = ['original', 'attacked']
-    eig_adj_result[budget_change_ratio] = eig_adj
-
-    eig_laplacian.index = range(len(eig_laplacian))
-    eig_laplacian.columns = ['original', 'attacked']
-    eig_laplacian_result[budget_change_ratio] = eig_laplacian
-
-    print('*' * 80)
+# Alpha_to_string = {
+#     1: '30-10-60',
+#     2: '40-10-50',
+#     3: '45-10-45',
+#     4: '1-0-99',
+# }
 
 
-with open('../result/{}_{}_numExp_{}.p'.format(args.graph_type, "middle-quantile", args.numExp), 'wb') as fid:
-   pickle.dump(result, fid)
+# # run the attack, with varying budgets
+# result = []
+# Deg_dist_result = {0.01: None, 0.05: None, 0.1: None, 0.15: None, 0.2: None}
+# eig_adj_result = {0.01: None, 0.05: None, 0.1: None, 0.15: None, 0.2: None}
+# eig_laplacian_result = {0.01: None, 0.05: None, 0.1: None, 0.15: None, 0.2: None}
 
-with open('../result/{}_{}_numExp_{}_Deg_distribution.p'.format(args.graph_type, "middle-quantile", args.numExp), 'wb') as fid:
-   pickle.dump(Deg_dist_result, fid)
+# for budget_change_ratio in [0.01, 0.05, 0.1, 0.15, 0.2]:
+# # for budget_change_ratio in [0.1]:
+#     Deg_dist = pd.DataFrame()
+#     eig_adj = pd.DataFrame()
+#     eig_laplacian = pd.DataFrame()
 
-with open('../result/{}_{}_numExp_{}_adj_spectrum.p'.format(args.graph_type, "middle-quantile", args.numExp), 'wb') as fid:
-    pickle.dump(eig_adj_result, fid)
+#     for exp in range(args.numExp):
+#         G, adj, S, S_prime = graph_data[exp]
 
-with open('../result/{}_{}_numExp_{}_laplacian_spectrum.p'.format(args.graph_type, "middle-quantile", args.numExp), 'wb') as fid:
-    pickle.dump(eig_laplacian_result, fid)
+#         Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G)
+#         opt_Adam = torch.optim.Adam(Attacker.parameters(), lr=learning_rate)
+#         #opt_SGD = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
+
+#         t1 = time.time()
+#         try:
+#             lambda1_ret, centrality_ret, utility_ret = exec_attack_Projection()
+#         except:
+#             print("Cannot execute attack\n")
+#             continue
+#         print("Time: {:.4f}".format(time.time() - t1))
+
+#         graph_size = len(G) 
+#         S_size = len(S)
+#         d_avg_S = np.mean([G.degree(i) for i in S.numpy()])
+
+#         # concatenate degree distribution
+#         deg_d, eig_A, eig_L = get_degree_dist_and_spectrum()
+#         deg_d.columns = ['original', 'attacked']
+#         if_detected = stats.ttest_ind(deg_d['original'], deg_d['attacked'])[1] <= 0.05
+#         Deg_dist = pd.concat([Deg_dist, deg_d])
+#         eig_adj  = pd.concat([eig_adj, eig_A])
+#         eig_laplacian = pd.concat([eig_laplacian, eig_L])
+
+#         result.append((lambda1_ret, centrality_ret, utility_ret, S_size, d_avg_S, graph_size, if_detected, budget_change_ratio))
+#         print("Budget: {:.2f}%    Exp: {}    lambda1_increase_ratio: {:.4f}%    centrality_increase_ratio: {:.4f}%    utility: {}    if_detected: {}\n".format(\
+#                 budget_change_ratio*100, exp, lambda1_ret*100, centrality_ret*100, utility_ret, if_detected))
+
+#     Deg_dist.index = range(len(Deg_dist))
+#     Deg_dist.columns = ['original', 'attacked']
+#     Deg_dist_result[budget_change_ratio] = Deg_dist
+
+#     eig_adj.index = range(len(eig_adj))
+#     eig_adj.columns = ['original', 'attacked']
+#     eig_adj_result[budget_change_ratio] = eig_adj
+
+#     eig_laplacian.index = range(len(eig_laplacian))
+#     eig_laplacian.columns = ['original', 'attacked']
+#     eig_laplacian_result[budget_change_ratio] = eig_laplacian
+
+#     print('*' * 80)
+
+
+# with open('../result/{}_{}_numExp_{}.p'.format(args.graph_type, "middle-quantile", args.numExp), 'wb') as fid:
+#    pickle.dump(result, fid)
+
+# with open('../result/{}_{}_numExp_{}_Deg_distribution.p'.format(args.graph_type, "middle-quantile", args.numExp), 'wb') as fid:
+#    pickle.dump(Deg_dist_result, fid)
+
+# with open('../result/{}_{}_numExp_{}_adj_spectrum.p'.format(args.graph_type, "middle-quantile", args.numExp), 'wb') as fid:
+#     pickle.dump(eig_adj_result, fid)
+
+# with open('../result/{}_{}_numExp_{}_laplacian_spectrum.p'.format(args.graph_type, "middle-quantile", args.numExp), 'wb') as fid:
+#     pickle.dump(eig_laplacian_result, fid)
 
 

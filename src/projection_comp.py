@@ -37,10 +37,15 @@ D = Lambda * B + (1 - Lambda) * C
 L_D = LIN.eig(D)[0].max()
 
 
-print("|L_A - L_C|: {:.4f}".format(np.abs(L_A - L_C)))
-print("|L_A - L_B|: {:.4f}".format(np.abs(L_A - L_B)))
-print("|L_A - L_D|: {:.4f}".format(np.abs(L_A - L_D)))
+E = (Lambda - 0.1) * B + (1 - Lambda + 0.1) * C
+L_E = LIN.eig(E)[0].max()
 
+print(L_A, L_D, L_E)
+
+#print("|L_A - L_C|: {:.4f}".format(np.abs(L_A - L_C)))
+#print("|L_A - L_B|: {:.4f}".format(np.abs(L_A - L_B)))
+#print("|L_A - L_D|: {:.4f}".format(np.abs(L_A - L_D)))
+#
 
 
 
