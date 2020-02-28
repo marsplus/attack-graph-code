@@ -49,28 +49,34 @@ class Threat_Model(nn.Module):
 
         # select the sub adjacency matrix corresponding to S and S_prime
         adj_S = torch.index_select(torch.index_select(self.original_adj, 0, self.S), 1, self.S)
+        adj_S_prime = torch.index_select(torch.index_select(self.original_adj, 0, self.S_prime), 1, self.S_prime)
         v_est_S = power_method(adj_S)
+        v_est_S_prime = power_method(adj_S_prime)
         self.lambda1_S_original = v_est_S.view(1, -1) @ adj_S @ v_est_S.view(-1, 1)
+        self.lambda1_S_prime_original = v_est_S_prime.view(1, -1) @ adj_S_prime @ v_est_S_prime.view(-1, 1)
+
     
         # centrality measure
-        vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
-        vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
-        normalization_const = 1 / vol_S + 1 / vol_S_prime 
-        cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
-        self.centrality_original = cut_size * normalization_const
+        #vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
+        #vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
+        #normalization_const = 1 / vol_S + 1 / vol_S_prime 
+        #cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
+        #self.centrality_original = cut_size * normalization_const
+        self.centrality_original = v_original[self.S].sum()
 
         # |lambda1(\tilde{A})-lambda1(A)| <= lambda1(A) * budget_change_ratio
         self.budget = self.lambda1_original * budget_change_ratio
        
-        # the thing we wanna optimize
+        ## the thing we wanna optimize
         # requires_grad_(True): tells PyTorch to starting tracking the gradients of this parameter
         self.adj_tensor = torch.tensor(adj, dtype=torch.float32).requires_grad_(True)
-        # tell PyTorch that self.adj_tensor is a parameter of Threat_Model, which we will optimize over
         self.adj_tensor = nn.Parameter(self.adj_tensor)
         
         # masking the gradients backpropagated to adj_tensor
         # make sure the perturbation added to the adjacency matrix is symmetric
-        self.adj_tensor.register_hook(lambda x: (1/2) * (x + torch.transpose(x, 0, 1)) * self.original_adj)
+        Mask = self.original_adj.detach()
+        # Mask = 1 - torch.eye(self.numNodes)
+        self.adj_tensor.register_hook(lambda x: (1/2) * (x + torch.transpose(x, 0, 1)) * Mask)
 
 
     def forward(self):
@@ -101,19 +107,21 @@ class Threat_Model(nn.Module):
         self.lambda1_S_prime = v_est_S_prime.view(1, -1) @ adj_tensor_S_prime @ v_est_S_prime.view(-1, 1)
     
         # centrality measure
-        vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
-        vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
-        normalization_const = 1 / vol_S + 1 / vol_S_prime 
-        cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
-        self.centrality = cut_size * normalization_const
+        #vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
+        #vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
+        #normalization_const = 1 / vol_S + 1 / vol_S_prime 
+        #cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
+        #self.centrality = cut_size * normalization_const
+        self.centrality = v_est[self.S].sum()
         
         # loss function 
-        U1 = self.alpha_1 * (self.lambda1_S - self.lambda1_S_original) / self.lambda1_S_original / self.avgDeg
+        U1 = self.alpha_1 * (self.lambda1_S - self.lambda1_S_original) / self.lambda1_S_original 
+        U2 = -1 * self.alpha_2 * (self.lambda1_S_prime - self.lambda1_S_prime_original) / self.lambda1_S_prime_original  
         U3 = self.alpha_3 * (self.centrality - self.centrality_original) / self.centrality_original
-        #print("U1: {:.4f}    U2: {:.4f}    U3: {:.4f}".format(U1.detach().squeeze().numpy(), 
-        #                                                     U2.detach().squeeze().numpy(),
-        #                                                     U3.detach().squeeze().numpy()))
-        self.Loss = -1 * (U1 + U3)
+        #print("U1: {:.4f}    U2: {:.4f}".format(U1.detach().squeeze().numpy(), 
+        #                                                     U2.detach().squeeze().numpy()))
+                                                        
+        self.Loss = -1 * (U1 + U2 + U3)
         return self.Loss
 
 
@@ -124,10 +132,9 @@ class Threat_Model(nn.Module):
         C = subgraph_cent[self.S].sum()
         return C
 
+
     def get_Laplacian(self):
-        # degree matrix
         D = torch.diag(self.adj_tensor @ torch.ones(self.numNodes).view(-1, 1).squeeze())
-        # Laplacian matrix
         L = D - self.adj_tensor
         return L.detach().clone()
 
@@ -158,8 +165,8 @@ class Threat_Model(nn.Module):
         return self.used_budget
 
 
-    def getRet(self):
-        return self.lambda1_S, self.lambda1, self.centrality
+    def get_result(self):
+        return self.lambda1_S, self.lambda1_S_prime, self.lambda1, self.centrality
 
     
     def get_attacked_adj(self):
@@ -173,8 +180,45 @@ class Threat_Model(nn.Module):
     # check budget constraint (for debug purpose)
     def check_constraint(self):
         #lambda1 = torch.max(torch.symeig(self.adj_tensor, eigenvectors=True)[0])
-        v = power_method(self.adj_tensor)
+        v = power_method(self.adj_tensor, 100)
         lambda1 = v.view(1, -1) @ self.adj_tensor @ v.view(-1, 1)
-        return torch.abs(self.lambda1 - self.lambda1_original) <= self.budget
+        eigVal_constraint = torch.abs(self.lambda1 - self.lambda1_original) <= self.budget
+        assert(eigVal_constraint)
+
+        isSymmetric = torch.all(self.adj_tensor == torch.transpose(self.adj_tensor, 0, 1))
+        assert(isSymmetric)
+
+        isNonnegative = torch.all(self.adj_tensor >= 0)
+        assert(isNonnegative)
+        
+
+
+    # return the change (%) of the average degree
+    # idx: focus on a subgraph indexed by idx
+    def diff_avgDeg(self, idx=None):
+        # the whole graph
+        if idx == None:
+            idx = torch.LongTensor(range(self.numNodes))
+        mat_original = torch.index_select(torch.index_select(self.original_adj, 0, idx), 1, idx)
+        mat_attacked = torch.index_select(torch.index_select(self.adj_tensor, 0, idx), 1, idx)
+
+        avg_deg_original = mat_original.sum()   / len(idx)
+        avg_deg_attacked = mat_attacked.sum()   / len(idx)
+
+        ret = (avg_deg_attacked - avg_deg_original) / avg_deg_original
+      
+        return ret.detach().numpy()
+
+
+    # measure the difference (%) of the frobinus norm of the adjacency matrix 
+    # before and after the attack
+    def diff_adjNorm(self):
+        original_norm = torch.norm(self.original_adj)
+        attacked_norm = torch.norm(self.adj_tensor)
+        ret =  (attacked_norm - original_norm) / original_norm
+        return ret.detach().numpy()
+
+
+
 
 
