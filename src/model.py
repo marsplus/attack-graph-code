@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 import networkx as nx
-from utils import power_method
+from utils import *
 
 
 class Threat_Model(nn.Module):
@@ -48,36 +48,40 @@ class Threat_Model(nn.Module):
         x_s_prime[self.S_prime] = 1
 
         # select the sub adjacency matrix corresponding to S and S_prime
-        adj_S = torch.index_select(torch.index_select(self.original_adj, 0, self.S), 1, self.S)
-        adj_S_prime = torch.index_select(torch.index_select(self.original_adj, 0, self.S_prime), 1, self.S_prime)
-        v_est_S = power_method(adj_S)
+        adj_S         = get_submatrix(self.original_adj, self.S, self.S)
+        adj_S_prime   = get_submatrix(self.original_adj, self.S_prime, self.S_prime)
+        v_est_S       = power_method(adj_S)
         v_est_S_prime = power_method(adj_S_prime)
         self.lambda1_S_original = v_est_S.view(1, -1) @ adj_S @ v_est_S.view(-1, 1)
         self.lambda1_S_prime_original = v_est_S_prime.view(1, -1) @ adj_S_prime @ v_est_S_prime.view(-1, 1)
-
     
-        # centrality measure
-        #vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
-        #vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
-        #normalization_const = 1 / vol_S + 1 / vol_S_prime 
-        #cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
-        #self.centrality_original = cut_size * normalization_const
-        self.centrality_original = v_original[self.S].sum()
+        ## centrality measure
+        vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
+        vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
+        normalization_const = 1 / vol_S + 1 / vol_S_prime 
+        cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
+        self.centrality_original = cut_size * normalization_const
+
+        ## negative impact
+        self.impact_S_original = v_original[self.S].sum()
+        # self.impact_S_original = self.lambda1_S_prime_original
+
 
         # |lambda1(\tilde{A})-lambda1(A)| <= lambda1(A) * budget_change_ratio
         self.budget = self.lambda1_original * budget_change_ratio
        
-        ## the thing we wanna optimize
-        # requires_grad_(True): tells PyTorch to starting tracking the gradients of this parameter
+        ## requires_grad_(True): tells PyTorch to starting tracking the gradients of this parameter
         self.adj_tensor = torch.tensor(adj, dtype=torch.float32).requires_grad_(True)
         self.adj_tensor = nn.Parameter(self.adj_tensor)
         
         # masking the gradients backpropagated to adj_tensor
-        # make sure the perturbation added to the adjacency matrix is symmetric
-        Mask = self.original_adj.detach()
-        # Mask = 1 - torch.eye(self.numNodes)
-        self.adj_tensor.register_hook(lambda x: (1/2) * (x + torch.transpose(x, 0, 1)) * Mask)
-
+        def _mask_(x):
+            x_copy = x.clone()
+            x_copy = (1/2) *( x_copy + torch.transpose(x_copy, 0, 1))
+            #x_copy[x_copy > 0] = 1
+            return x_copy
+        self.adj_tensor.register_hook(lambda x: _mask_(x))
+        # self.adj_tensor.register_hook(lambda x: (1/2) * (x + torch.transpose(x, 0, 1)))
 
     def forward(self):
         """
@@ -95,29 +99,34 @@ class Threat_Model(nn.Module):
         x_s_prime[self.S_prime] = 1
 
         # select the sub adjacency matrix corresponding to S and S_prime
-        adj_tensor_S = torch.index_select(torch.index_select(self.adj_tensor, 0, self.S), 1, self.S)
-        adj_tensor_S_prime = torch.index_select(torch.index_select(self.adj_tensor, 0, self.S_prime), 1, self.S_prime)
+        adj_tensor_S = get_submatrix(self.adj_tensor, self.S, self.S)
+        adj_tensor_S_prime = get_submatrix(self.adj_tensor, self.S_prime, self.S_prime)
     
         # all sorts of largest eigenvalues 
-        v_est = power_method(self.adj_tensor.data)
-        v_est_S = power_method(adj_tensor_S.data)
-        v_est_S_prime = power_method(adj_tensor_S_prime.data)
-        self.lambda1 = v_est.view(1, -1) @ self.adj_tensor @ v_est.view(-1, 1)
+        v_est          = power_method(self.adj_tensor.data)
+        v_est_S        = power_method(adj_tensor_S.data)
+        v_est_S_prime  = power_method(adj_tensor_S_prime.data)
         self.lambda1_S = v_est_S.view(1, -1) @ adj_tensor_S @ v_est_S.view(-1, 1)
         self.lambda1_S_prime = v_est_S_prime.view(1, -1) @ adj_tensor_S_prime @ v_est_S_prime.view(-1, 1)
+
     
-        # centrality measure
-        #vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
-        #vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
-        #normalization_const = 1 / vol_S + 1 / vol_S_prime 
-        #cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
-        #self.centrality = cut_size * normalization_const
-        self.centrality = v_est[self.S].sum()
+        ## centrality measure
+        vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
+        vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
+        normalization_const = 1 / vol_S + 1 / vol_S_prime 
+        cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
+        self.centrality = cut_size * normalization_const
+
+
+        ## negative impact
+        self.impact_S = v_est[self.S].sum()
+        # self.impact_S = self.lambda1_S_prime
+
         
-        # loss function 
-        U1 = self.alpha_1 * (self.lambda1_S - self.lambda1_S_original) / self.lambda1_S_original 
-        U2 = -1 * self.alpha_2 * (self.lambda1_S_prime - self.lambda1_S_prime_original) / self.lambda1_S_prime_original  
-        U3 = self.alpha_3 * (self.centrality - self.centrality_original) / self.centrality_original
+        # utility function 
+        U1 =  self.alpha_1 * (self.lambda1_S - self.lambda1_S_original) / self.lambda1_S_original 
+        U2 =  self.alpha_2 * (self.impact_S - self.impact_S_original) / self.impact_S_original
+        U3 =  self.alpha_3 * (self.centrality - self.centrality_original) / self.centrality_original
         #print("U1: {:.4f}    U2: {:.4f}".format(U1.detach().squeeze().numpy(), 
         #                                                     U2.detach().squeeze().numpy()))
                                                         
@@ -149,9 +158,10 @@ class Threat_Model(nn.Module):
             # perturbation = gradient x learning rate
             pert = self.adj_tensor.grad * self.learning_rate
             # budget used in this step is the operator norm of pert
-            # step_budget = torch.max(torch.abs(torch.symeig(pert)[0]))
-            v = power_method(pert)
-            step_budget = v.view(1, -1) @ pert @ v.view(-1, 1)
+            v1 = power_method(pert, 100)
+            u1 = power_method(-pert, 100)
+            step_budget = max(v1.view(1, -1) @ pert    @ v1.view(-1, 1), \
+                              u1.view(1, -1) @ (-pert) @ u1.view(-1, 1) )
             return step_budget
 
 
@@ -166,7 +176,7 @@ class Threat_Model(nn.Module):
 
 
     def get_result(self):
-        return self.lambda1_S, self.lambda1_S_prime, self.lambda1, self.centrality
+        return self.lambda1_S, self.impact_S, self.centrality
 
     
     def get_attacked_adj(self):
@@ -177,19 +187,25 @@ class Threat_Model(nn.Module):
         return -1 * self.Loss
 
 
-    # check budget constraint (for debug purpose)
-    def check_constraint(self):
-        #lambda1 = torch.max(torch.symeig(self.adj_tensor, eigenvectors=True)[0])
-        v = power_method(self.adj_tensor, 100)
-        lambda1 = v.view(1, -1) @ self.adj_tensor @ v.view(-1, 1)
-        eigVal_constraint = torch.abs(self.lambda1 - self.lambda1_original) <= self.budget
-        assert(eigVal_constraint)
+    # check budget constraint 
+    def check_constraint(self, extTensor=[]):
+        if extTensor:
+            pert = extTensor[0] - self.original_adj
+        else:
+            pert = self.adj_tensor - self.original_adj
+
+        v1 = power_method(pert,  100)
+        u1 = power_method(-pert, 100)
+        spec_norm = max(v1.view(1, -1) @ pert    @ v1.view(-1, 1), \
+                        u1.view(1, -1) @ (-pert) @ u1.view(-1, 1) )
+        # print(spec_norm, self.budget)
+        eigVal_constraint = (spec_norm <= self.budget)
 
         isSymmetric = torch.all(self.adj_tensor == torch.transpose(self.adj_tensor, 0, 1))
-        assert(isSymmetric)
 
         isNonnegative = torch.all(self.adj_tensor >= 0)
-        assert(isNonnegative)
+
+        return (eigVal_constraint and isSymmetric and isNonnegative)
         
 
 
@@ -199,14 +215,13 @@ class Threat_Model(nn.Module):
         # the whole graph
         if idx == None:
             idx = torch.LongTensor(range(self.numNodes))
-        mat_original = torch.index_select(torch.index_select(self.original_adj, 0, idx), 1, idx)
-        mat_attacked = torch.index_select(torch.index_select(self.adj_tensor, 0, idx), 1, idx)
+        mat_original = get_submatrix(self.original_adj, idx, idx)
+        mat_attacked = get_submatrix(self.adj_tensor, idx, idx)
 
         avg_deg_original = mat_original.sum()   / len(idx)
         avg_deg_attacked = mat_attacked.sum()   / len(idx)
 
         ret = (avg_deg_attacked - avg_deg_original) / avg_deg_original
-      
         return ret.detach().numpy()
 
 

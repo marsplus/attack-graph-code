@@ -21,9 +21,6 @@ parser.add_argument('--id', type=int, default=1,
                     help='parallel id')
 parser.add_argument('--graph_type', type=str, default='BA',
                     help='graph type')
-parser.add_argument('--Alpha_id', type=int, default=1,
-                    help='which set of parameters to use')
-
 args = parser.parse_args()
 
 
@@ -43,7 +40,7 @@ def select_comm(graph, isEmail=False, mapping=None):
             else:
                 comm_to_nodes[commID].append(mapping[nodeID])
         comm_size = sorted([(key, len(comm_to_nodes[key])) for key in comm_to_nodes.keys()], key=lambda x: x[1])
-        comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.5)][0]]
+        comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.75)][0]]
     else:
         all_comms = list(greedy_modularity_communities(graph))
         all_comms = sorted(all_comms, key=lambda x: len(x))
@@ -83,9 +80,8 @@ def gen_graph(graph_type, graph_id=1):
 
 def SGD_attack(Attacker, Optimizer, maxIter=50):
     Attacker_budget = Attacker.get_budget()
-
     cnt = 0
-    while cnt <= maxIter:
+    while cnt < maxIter:
         Loss = Attacker()
         Optimizer.zero_grad()
         Loss.backward()
@@ -101,28 +97,32 @@ def SGD_attack(Attacker, Optimizer, maxIter=50):
             break
         cnt += 1
 
-    Attacker.check_constraint()
+    Attacker.adj_tensor.data[Attacker.adj_tensor.data < 0] = 0
+    Attacker.adj_tensor.data[Attacker.adj_tensor.data > 1] = 1
+    Attacker.adj_tensor.data -= torch.diag(torch.diag(Attacker.adj_tensor.data))
+    Attacker.adj_tensor.data = rounding(Attacker)
 
-    lambda1_S, lambda1_S_prime, lambda1, centrality = Attacker.get_result()
+    Attacker()
+    assert(Attacker.check_constraint())
 
-    lambda1_S_0, lambda1_S_prime_0, centrality_0 = \
-            Attacker.lambda1_S_original, Attacker.lambda1_S_prime_original, Attacker.centrality_original
+    lambda1_S, impact_S, centrality = Attacker.get_result()
+    lambda1_S_0, impact_S_0, centrality_0 = \
+            Attacker.lambda1_S_original, Attacker.impact_S_original, Attacker.centrality_original
 
-    lambda1_S_increase_ratio = (lambda1_S - lambda1_S_0) / lambda1_S_0
-    lambda1_S_prime_increase_ratio = (lambda1_S_prime - lambda1_S_prime_0) / lambda1_S_prime_0
+    lambda1_S_increase_ratio =  (lambda1_S - lambda1_S_0) / lambda1_S_0
+    impact_S_increase_ratio = (impact_S - impact_S_0) / impact_S_0
     centrality_increase_ratio = (centrality - centrality_0) / centrality_0
-
     utility = Attacker.get_utility()
 
     return (lambda1_S_increase_ratio.detach().numpy().squeeze(),
-            lambda1_S_prime_increase_ratio.detach().numpy().squeeze(),
+            impact_S_increase_ratio.detach().numpy().squeeze(),
             centrality_increase_ratio.detach().numpy().squeeze(),
             utility.detach().numpy().squeeze())
 
 
 
 # execute projection attack
-def projection_attack(Attacker, Optimizer, Iter=100):
+def projection_attack(Attacker, Optimizer, Iter=50):
     # optimize until some weights are about to
     # become negative
     #while torch.all(Attacker.adj_tensor >= 0):
@@ -144,22 +144,24 @@ def projection_attack(Attacker, Optimizer, Iter=100):
 
         # add projected Delta to adjacency matrix
         Attacker.adj_tensor.data = Attacker.original_adj + Delta_proj
+        Attacker.adj_tensor.data[Attacker.adj_tensor.data < 0] = 0
+        Attacker.adj_tensor.data[Attacker.adj_tensor.data > 1] = 1
+        Attacker.adj_tensor.data -= torch.diag(torch.diag(Attacker.adj_tensor.data))
+        Attacker.adj_tensor.data = rounding(Attacker)
         Attacker() #  updates all the statistics since adj_tensor has been changed by projection
         assert(Attacker.check_constraint())
 
-    lambda1_S, lambda1_S_prime, lambda1, centrality = Attacker.get_result()
+    lambda1_S, impact_S, centrality = Attacker.get_result()
+    lambda1_S_0, impact_S_0, centrality_0 = \
+            Attacker.lambda1_S_original, Attacker.impact_S_original, Attacker.centrality_original
 
-    lambda1_S_0, lambda1_S_prime_0, centrality_0 = \
-            Attacker.lambda1_S_original, Attacker.lambda1_S_prime_original, Attacker.centrality_original
-
-    lambda1_S_increase_ratio = (lambda1_S - lambda1_S_0) / lambda1_S_0
-    lambda1_S_prime_increase_ratio = (lambda1_S_prime - lambda1_S_prime_0) / lambda1_S_prime_0
+    lambda1_S_increase_ratio =  (lambda1_S - lambda1_S_0) / lambda1_S_0
+    impact_S_increase_ratio = (impact_S - impact_S_0) / impact_S_0
     centrality_increase_ratio = (centrality - centrality_0) / centrality_0
-
     utility = Attacker.get_utility()
 
     return (lambda1_S_increase_ratio.detach().numpy().squeeze(),
-            lambda1_S_prime_increase_ratio.detach().numpy().squeeze(),
+            impact_S_increase_ratio.detach().numpy().squeeze(),
             centrality_increase_ratio.detach().numpy().squeeze(),
             utility.detach().numpy().squeeze())
 
@@ -167,9 +169,9 @@ def projection_attack(Attacker, Optimizer, Iter=100):
 
 def grid_search_hyperparameters():
     ret = []
-    alpha_2 = 0.2
-    for alpha_1 in np.arange(0.01, 1-alpha_2, 0.01):
-        alpha_3 = max(1 - alpha_1 - alpha_2, 0)
+    alpha_3 = 0.3
+    for alpha_1 in np.arange(0.01, 1-alpha_3, 0.01):
+        alpha_2 = max(1 - alpha_1 - alpha_3, 0)
         Alpha = [alpha_1, alpha_2, alpha_3]
         print("alpha_1: {:.4f}      alpha_2: {:.4f}     alpha_3: {:.4f}\n".format(alpha_1, alpha_2, alpha_3))
 
@@ -178,7 +180,7 @@ def grid_search_hyperparameters():
         Optimizer = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
 
         t1 = time.time()
-        lambda1_S_ret, lambda1_S_prime_ret, centrality_ret, utility_ret = SGD_attack(Attacker, Optimizer)
+        lambda1_S_ret, impact_S_ret, centrality_ret, utility_ret = SGD_attack(Attacker, Optimizer)
         print("Time: {:.4f}".format(time.time() - t1))
 
         avgDegDiff          = Attacker.diff_avgDeg()
@@ -186,24 +188,74 @@ def grid_search_hyperparameters():
         avgDegDiff_S_prime  = Attacker.diff_avgDeg(S_prime)
         adjNormDiff         = Attacker.diff_adjNorm()
 
+        utility = Attacker.get_utility()
+
         ## record all the statistics we are interested in
-        ret.append((utility_ret, lambda1_S_ret, centrality_ret, budget_change_ratio, \
+        ret.append((utility_ret, lambda1_S_ret, impact_S_ret, centrality_ret, budget_change_ratio, \
             Alpha, avgDegDiff, avgDegDiff_S, avgDegDiff_S_prime, adjNormDiff, Attacker))
-        print("Budget: {:.2f}%     lambda1_S: {:.4f}%      lambda1_S_prime: {:.4f}%     centrality: {:.4f}%    utility: {}\n".format(\
-                budget_change_ratio*100, lambda1_S_ret*100, lambda1_S_prime_ret*100, centrality_ret*100, utility_ret))
+        print("Budget: {:.2f}%     lambda1_S: {:.4f}%       negative impact: {:.4f}%      centrality: {:.4f}%    utility: {}\n".format(\
+                budget_change_ratio*100, lambda1_S_ret*100, impact_S_ret*100, centrality_ret*100, utility_ret))
         print('*' * 80)
     return ret
 
 
+
+## the solution from the threat model is a matrix 
+## with fractional entries, so we need to round it 
+## to a matrix with only integral entries.
+def rounding(Attacker):
+    A_attacked = Attacker.get_attacked_adj().numpy()
+    A = Attacker.original_adj.numpy()
+
+    A_attacked[A > 0] = 1
+    idx = np.nonzero(np.triu(A_attacked, 1) != np.triu(A, 1))
+    numChange = len(idx[0])
+
+    modifiedEdges = []
+    for i in range(numChange):
+        rowIdx, colIdx = idx[0][i], idx[1][i]
+        w_a = A_attacked[rowIdx][colIdx]
+        w_o = A[rowIdx][colIdx]
+        Diff = np.abs(w_a - w_o)
+        modifiedEdges.append((rowIdx, colIdx, Diff))
+    modifiedEdges = sorted(modifiedEdges, key=lambda x: x[2], reverse=True)
+
+    B = A.copy()
+    cnt = 0
+    addedEdges = 0
+    while (LIN.norm(B - A, 2) <= Attacker.budget):
+        Edge = modifiedEdges[cnt]
+        B[Edge[0], Edge[1]] = 1
+        B[Edge[1], Edge[0]] = 1
+        addedEdges += 1
+
+        ## if budget constraints are violated
+        ## revert the operations above
+        if LIN.norm(B - A, 2) > Attacker.budget:
+            B[Edge[0], Edge[1]] = 0
+            B[Edge[1], Edge[0]] = 0
+            addedEdges -= 1
+            break
+        else:     
+            cnt += 1
+            if cnt > len(modifiedEdges):
+                break
+    print("Added {} edges\n".format(addedEdges))
+    return torch.tensor(B, dtype=torch.float32)
+
+
+
+
 # parameters for running experiments
 n = 375
-# Alpha = [0.4, 0, 0.6]
 learning_rate = 1
 
 
 result = defaultdict(list)
-# for budget_change_ratio in [0.01, 0.05, 0.1, 0.15, 0.2]:
-for budget_change_ratio in [0.1]:
+graph_ret = defaultdict(list)
+
+for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
+# for budget_change_ratio in [0.4]:
     for i in range(args.numExp):
         G = gen_graph(args.graph_type, i)
         mapping = {item: idx for idx, item in enumerate(G.nodes())}
@@ -222,16 +274,45 @@ for budget_change_ratio in [0.1]:
         # exhaustively search the best set of hyper-parameters
         ret = grid_search_hyperparameters()
 
-        # find a set of hyper-parameters such that both the largest eigenvalue
-        # and the centrality measure are increased
-        ret_pos = [item for item in ret if (item[1] + item[2]) >= 0]
+        # pick the optimal solution from these returned by grid search
+        ret_pos = [item for item in ret if (item[1] >= 0 and item[2] >= 0 and item[3] >= 0)]
         if ret_pos:
-            result[budget_change_ratio].append(max(ret_pos, key=lambda x: x[1] * x[2]))
+            opt_sol = max(ret_pos, key=lambda x: x[1] + x[2] + x[3])
+            result[budget_change_ratio].append(opt_sol)
         else:
-            result[budget_change_ratio].append(max(ret, key=lambda x: x[1] * x[2]))
+            # in case ret_pos is empty
+            opt_sol = max(ret, key=lambda x: x[0])
+            result[budget_change_ratio].append(opt_sol)
 
 
-# with open('../result/{}_numExp_{}.p'.format(args.graph_type, args.numExp), 'wb') as fid:
-#    pickle.dump(result, fid)
+        ## attacked graphs
+        Attacker = opt_sol[-1]
+        G_attacked = nx.from_numpy_matrix(Attacker.get_attacked_adj().numpy())
+        targets = [True if i in S else False for i in range(G.order())]
+        targets = {idx: {'target': targets[idx]} for idx, _ in enumerate(targets)}
+        nx.set_node_attributes(G_attacked, targets)
+        nx.set_node_attributes(G, targets)
+        graph_ret[budget_change_ratio].append({'original': G, 'attacked': G_attacked})
 
 
+## save attacked graphs to disk
+with open('../result/{}_numExp_{}_attacked_graphs_75quantile.p'.format(args.graph_type, args.numExp), 'wb') as fid:
+    pickle.dump(graph_ret, fid)
+
+
+with open('../result/{}_numExp_{}_ret_alpha3=0.3_75quantile.p'.format(args.graph_type, args.numExp), 'wb') as fid:
+    pickle.dump(ret, fid)
+
+
+
+# Alpha = [0.4, 0.3, 0.3]
+# Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G)
+# Optimizer = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
+
+# for i in range(5):
+#     Loss = Attacker()
+#     Optimizer.zero_grad()
+#     Loss.backward()
+#     Optimizer.step()
+# Attacker.adj_tensor.grad
+# Optimizer.step()
