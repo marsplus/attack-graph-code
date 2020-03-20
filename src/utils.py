@@ -16,7 +16,7 @@ def power_method(mat, Iter=50):
     x = torch.rand(n) 
     x /= torch.norm(x, 2)
 
-    flag = 1e-6
+    flag = 1e-7
     # while True:
     for i in range(Iter):
         x_new = mat @ x

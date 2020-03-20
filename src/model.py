@@ -33,8 +33,8 @@ class Threat_Model(nn.Module):
         self.original_adj = torch.tensor(adj, dtype=torch.float32)
         
         # eigenvals and eigenvectors associated with the largest eig-value of adj
-        v_original = power_method(self.original_adj)
-        self.lambda1_original = (v_original.view(1, -1) @ self.original_adj @ v_original.view(-1, 1)).squeeze()
+        v_original = power_method(self.original_adj.data)
+        self.lambda1_original = (v_original @ self.original_adj @ v_original).squeeze()
 
         # degree matrix
         D = torch.diag(self.original_adj @ torch.ones(self.numNodes).view(-1, 1).squeeze())
@@ -52,14 +52,14 @@ class Threat_Model(nn.Module):
         adj_S_prime   = get_submatrix(self.original_adj, self.S_prime, self.S_prime)
         v_est_S       = power_method(adj_S)
         v_est_S_prime = power_method(adj_S_prime)
-        self.lambda1_S_original = v_est_S.view(1, -1) @ adj_S @ v_est_S.view(-1, 1)
-        self.lambda1_S_prime_original = v_est_S_prime.view(1, -1) @ adj_S_prime @ v_est_S_prime.view(-1, 1)
+        self.lambda1_S_original = v_est_S @ adj_S @ v_est_S
+        self.lambda1_S_prime_original = v_est_S_prime @ adj_S_prime @ v_est_S_prime
     
         ## centrality measure
-        vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
-        vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
+        vol_S = x_s @ D @ x_s
+        vol_S_prime = x_s_prime @ D @ x_s_prime
         normalization_const = 1 / vol_S + 1 / vol_S_prime 
-        cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
+        cut_size = x_s @ L @ x_s
         self.centrality_original = cut_size * normalization_const
 
         ## negative impact
@@ -103,18 +103,19 @@ class Threat_Model(nn.Module):
         adj_tensor_S_prime = get_submatrix(self.adj_tensor, self.S_prime, self.S_prime)
     
         # all sorts of largest eigenvalues 
-        v_est          = power_method(self.adj_tensor.data)
+        #v_est          = power_method(self.adj_tensor.data)
+        v_est          = torch.symeig(self.adj_tensor, eigenvectors=True)[1][:, -1] 
         v_est_S        = power_method(adj_tensor_S.data)
         v_est_S_prime  = power_method(adj_tensor_S_prime.data)
-        self.lambda1_S = v_est_S.view(1, -1) @ adj_tensor_S @ v_est_S.view(-1, 1)
-        self.lambda1_S_prime = v_est_S_prime.view(1, -1) @ adj_tensor_S_prime @ v_est_S_prime.view(-1, 1)
+        self.lambda1_S = v_est_S @ adj_tensor_S @ v_est_S
+        self.lambda1_S_prime = v_est_S_prime @ adj_tensor_S_prime @ v_est_S_prime
 
     
         ## centrality measure
-        vol_S = x_s.view(1, -1) @ D @ x_s.view(-1, 1)
-        vol_S_prime = x_s_prime.view(1, -1) @ D @ x_s_prime.view(-1, 1)
+        vol_S = x_s @ D @ x_s
+        vol_S_prime = x_s_prime @ D @ x_s_prime
         normalization_const = 1 / vol_S + 1 / vol_S_prime 
-        cut_size = x_s.view(1, -1) @ L @ x_s.view(-1, 1)
+        cut_size = x_s @ L @ x_s
         self.centrality = cut_size * normalization_const
 
 
@@ -124,22 +125,14 @@ class Threat_Model(nn.Module):
 
         
         # utility function 
-        U1 =  self.alpha_1 * (self.lambda1_S - self.lambda1_S_original) / self.lambda1_S_original 
-        U2 =  self.alpha_2 * (self.impact_S - self.impact_S_original) / self.impact_S_original
-        U3 =  self.alpha_3 * (self.centrality - self.centrality_original) / self.centrality_original
-        #print("U1: {:.4f}    U2: {:.4f}".format(U1.detach().squeeze().numpy(), 
-        #                                                     U2.detach().squeeze().numpy()))
+        U1 =  self.alpha_1 * self.lambda1_S
+        U2 =  self.alpha_2 * self.impact_S
+        U3 =  self.alpha_3 * self.centrality
+        print("U1: {:.4f}    U2: {:.4f}".format(U1.detach().squeeze().numpy(), 
+                                                             U2.detach().squeeze().numpy()))
                                                         
         self.Loss = -1 * (U1 + U2 + U3)
         return self.Loss
-
-
-    def subgraph_centrality(self):
-        eigVals, eigVecs = torch.symeig(self.adj_tensor, eigenvectors=True)
-        eigVals_exp = torch.diag(torch.exp(eigVals))
-        subgraph_cent = torch.diag(torch.mm(eigVecs, torch.mm(eigVals_exp, torch.transpose(eigVecs, 0, 1))))
-        C = subgraph_cent[self.S].sum()
-        return C
 
 
     def get_Laplacian(self):
@@ -157,11 +150,18 @@ class Threat_Model(nn.Module):
         if self.adj_tensor.grad != None:
             # perturbation = gradient x learning rate
             pert = self.adj_tensor.grad * self.learning_rate
-            # budget used in this step is the operator norm of pert
-            v1 = power_method(pert, 100)
-            u1 = power_method(-pert, 100)
-            step_budget = max(v1.view(1, -1) @ pert    @ v1.view(-1, 1), \
-                              u1.view(1, -1) @ (-pert) @ u1.view(-1, 1) )
+            spectra = torch.symeig(pert, eigenvectors=True)[0]
+            step_budget = max(
+                    torch.abs(torch.max(spectra)),
+                    torch.abs(torch.min(spectra))
+                    )
+
+            ## budget used in this step is the operator norm of pert
+            #v1 = power_method(pert, 150)
+            #u1 = power_method(-pert, 150)
+            #step_budget = max(v1.view(1, -1) @ pert    @ v1.view(-1, 1), \
+            #                  u1.view(1, -1) @ (-pert) @ u1.view(-1, 1) )
+
             return step_budget
 
 
@@ -194,11 +194,17 @@ class Threat_Model(nn.Module):
         else:
             pert = self.adj_tensor - self.original_adj
 
-        v1 = power_method(pert,  100)
-        u1 = power_method(-pert, 100)
-        spec_norm = max(v1.view(1, -1) @ pert    @ v1.view(-1, 1), \
-                        u1.view(1, -1) @ (-pert) @ u1.view(-1, 1) )
-        # print(spec_norm, self.budget)
+        #v1 = power_method(pert,  100)
+        #u1 = power_method(-pert, 100)
+        #lambda1 = v1.view(1, -1) @ pert    @ v1.view(-1, 1)
+        #eta1    = u1.view(1, -1) @ (-pert) @ u1.view(-1, 1)
+        #spec_norm = max(torch.abs(lambda1), torch.abs(eta1))
+        
+        spectra = torch.symeig(pert, eigenvectors=True)[0]
+        spec_norm = max(
+                torch.abs(torch.max(spectra)),
+                torch.abs(torch.min(spectra))
+                )
         eigVal_constraint = (spec_norm <= self.budget)
 
         isSymmetric = torch.all(self.adj_tensor == torch.transpose(self.adj_tensor, 0, 1))

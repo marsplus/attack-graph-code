@@ -40,7 +40,7 @@ def select_comm(graph, isEmail=False, mapping=None):
             else:
                 comm_to_nodes[commID].append(mapping[nodeID])
         comm_size = sorted([(key, len(comm_to_nodes[key])) for key in comm_to_nodes.keys()], key=lambda x: x[1])
-        comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.75)][0]]
+        comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.5)][0]]
     else:
         all_comms = list(greedy_modularity_communities(graph))
         all_comms = sorted(all_comms, key=lambda x: len(x))
@@ -78,7 +78,7 @@ def gen_graph(graph_type, graph_id=1):
     return G
 
 
-def SGD_attack(Attacker, Optimizer, maxIter=50):
+def SGD_attack(Attacker, Optimizer, maxIter=100):
     Attacker_budget = Attacker.get_budget()
     cnt = 0
     while cnt < maxIter:
@@ -100,7 +100,7 @@ def SGD_attack(Attacker, Optimizer, maxIter=50):
     Attacker.adj_tensor.data[Attacker.adj_tensor.data < 0] = 0
     Attacker.adj_tensor.data[Attacker.adj_tensor.data > 1] = 1
     Attacker.adj_tensor.data -= torch.diag(torch.diag(Attacker.adj_tensor.data))
-    Attacker.adj_tensor.data = rounding(Attacker)
+    Attacker.adj_tensor.data, addedEdges = rounding(Attacker)
 
     Attacker()
     assert(Attacker.check_constraint())
@@ -117,7 +117,8 @@ def SGD_attack(Attacker, Optimizer, maxIter=50):
     return (lambda1_S_increase_ratio.detach().numpy().squeeze(),
             impact_S_increase_ratio.detach().numpy().squeeze(),
             centrality_increase_ratio.detach().numpy().squeeze(),
-            utility.detach().numpy().squeeze())
+            utility.detach().numpy().squeeze(),
+            addedEdges)
 
 
 
@@ -169,33 +170,36 @@ def projection_attack(Attacker, Optimizer, Iter=50):
 
 def grid_search_hyperparameters():
     ret = []
-    alpha_3 = 0.3
-    for alpha_1 in np.arange(0.01, 1-alpha_3, 0.01):
-        alpha_2 = max(1 - alpha_1 - alpha_3, 0)
-        Alpha = [alpha_1, alpha_2, alpha_3]
-        print("alpha_1: {:.4f}      alpha_2: {:.4f}     alpha_3: {:.4f}\n".format(alpha_1, alpha_2, alpha_3))
+    #alpha_3 = 0
+    #for alpha_1 in np.arange(0.01, 1 - alpha_3, 0.01):
+    #alpha_2 = max(1 - alpha_1 - alpha_3, 0)
 
-        Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G)
-        # Optimizer = torch.optim.Adam(Attacker.parameters(), lr=learning_rate)
-        Optimizer = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
+    alpha_1, alpha_2, alpha_3 = 0, 1, 0
+    Alpha = [alpha_1, alpha_2, alpha_3]
+    print("alpha_1: {:.4f}      alpha_2: {:.4f}     alpha_3: {:.4f}\n".format(alpha_1, alpha_2, alpha_3))
 
-        t1 = time.time()
-        lambda1_S_ret, impact_S_ret, centrality_ret, utility_ret = SGD_attack(Attacker, Optimizer)
-        print("Time: {:.4f}".format(time.time() - t1))
+    Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G)
+    # Optimizer = torch.optim.Adam(Attacker.parameters(), lr=learning_rate)
+    Optimizer = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
 
-        avgDegDiff          = Attacker.diff_avgDeg()
-        avgDegDiff_S        = Attacker.diff_avgDeg(S)
-        avgDegDiff_S_prime  = Attacker.diff_avgDeg(S_prime)
-        adjNormDiff         = Attacker.diff_adjNorm()
+    t1 = time.time()
+    lambda1_S_ret, impact_S_ret, centrality_ret, utility_ret, addedEdges = SGD_attack(Attacker, Optimizer)
+    print("Time: {:.4f}".format(time.time() - t1))
 
-        utility = Attacker.get_utility()
+    avgDegDiff          = Attacker.diff_avgDeg()
+    avgDegDiff_S        = Attacker.diff_avgDeg(S)
+    avgDegDiff_S_prime  = Attacker.diff_avgDeg(S_prime)
+    adjNormDiff         = Attacker.diff_adjNorm()
+    addedEdgesRatio     = addedEdges / len(G.edges())
 
-        ## record all the statistics we are interested in
-        ret.append((utility_ret, lambda1_S_ret, impact_S_ret, centrality_ret, budget_change_ratio, \
-            Alpha, avgDegDiff, avgDegDiff_S, avgDegDiff_S_prime, adjNormDiff, Attacker))
-        print("Budget: {:.2f}%     lambda1_S: {:.4f}%       negative impact: {:.4f}%      centrality: {:.4f}%    utility: {}\n".format(\
-                budget_change_ratio*100, lambda1_S_ret*100, impact_S_ret*100, centrality_ret*100, utility_ret))
-        print('*' * 80)
+    utility = Attacker.get_utility()
+
+    ## record all the statistics we are interested in
+    ret.append((utility_ret, lambda1_S_ret, impact_S_ret, centrality_ret, budget_change_ratio, \
+        Alpha, avgDegDiff, avgDegDiff_S, avgDegDiff_S_prime, adjNormDiff, addedEdgesRatio, Attacker))
+    print("Budget: {:.2f}%     lambda1_S: {:.4f}%       negative impact: {:.4f}%      centrality: {:.4f}%    addedEdgesRatio: {:.4f}%\n".format(\
+            budget_change_ratio*100, lambda1_S_ret*100, impact_S_ret*100, centrality_ret*100, addedEdgesRatio*100))
+    print('*' * 80)
     return ret
 
 
@@ -221,6 +225,11 @@ def rounding(Attacker):
     modifiedEdges = sorted(modifiedEdges, key=lambda x: x[2], reverse=True)
 
     B = A.copy()
+
+    ## no modification made 
+    if len(modifiedEdges) == 0:
+        return ( torch.tensor(B, dtype=torch.float32), 0 )
+
     cnt = 0
     addedEdges = 0
     while (LIN.norm(B - A, 2) <= Attacker.budget):
@@ -238,10 +247,10 @@ def rounding(Attacker):
             break
         else:     
             cnt += 1
-            if cnt > len(modifiedEdges):
+            if cnt >= len(modifiedEdges):
                 break
     print("Added {} edges\n".format(addedEdges))
-    return torch.tensor(B, dtype=torch.float32)
+    return ( torch.tensor(B, dtype=torch.float32), addedEdges )
 
 
 
@@ -255,7 +264,7 @@ result = defaultdict(list)
 graph_ret = defaultdict(list)
 
 for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
-# for budget_change_ratio in [0.4]:
+#for budget_change_ratio in [0.4]:
     for i in range(args.numExp):
         G = gen_graph(args.graph_type, i)
         mapping = {item: idx for idx, item in enumerate(G.nodes())}
@@ -275,14 +284,15 @@ for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
         ret = grid_search_hyperparameters()
 
         # pick the optimal solution from these returned by grid search
-        ret_pos = [item for item in ret if (item[1] >= 0 and item[2] >= 0 and item[3] >= 0)]
-        if ret_pos:
-            opt_sol = max(ret_pos, key=lambda x: x[1] + x[2] + x[3])
-            result[budget_change_ratio].append(opt_sol)
-        else:
-            # in case ret_pos is empty
-            opt_sol = max(ret, key=lambda x: x[0])
-            result[budget_change_ratio].append(opt_sol)
+        #ret_pos = [item for item in ret if (item[1] >= 0 and item[3] >= 0)]
+        #if ret_pos:
+        #    opt_sol = max(ret_pos, key=lambda x: x[1] + x[3])
+        #    result[budget_change_ratio].append(opt_sol)
+        #else:
+        #    # in case ret_pos is empty
+        #    opt_sol = max(ret, key=lambda x: x[0])
+        #    result[budget_change_ratio].append(opt_sol)
+        opt_sol = max(ret, key=lambda x: x[0])
 
 
         ## attacked graphs
@@ -296,12 +306,12 @@ for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
 
 
 ## save attacked graphs to disk
-with open('../result/{}_numExp_{}_attacked_graphs_75quantile.p'.format(args.graph_type, args.numExp), 'wb') as fid:
-    pickle.dump(graph_ret, fid)
-
-
-with open('../result/{}_numExp_{}_ret_alpha3=0.3_75quantile.p'.format(args.graph_type, args.numExp), 'wb') as fid:
-    pickle.dump(ret, fid)
+#with open('../result/utility_max/{}_numExp_{}_attacked_graphs_alpha3=1.p'.format(args.graph_type, args.numExp), 'wb') as fid:
+#    pickle.dump(graph_ret, fid)
+#
+#
+#with open('../result/utility_max/{}_numExp_{}_ret_alpha3=1.p'.format(args.graph_type, args.numExp), 'wb') as fid:
+#    pickle.dump(ret, fid)
 
 
 
