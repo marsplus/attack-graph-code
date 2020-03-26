@@ -5,7 +5,7 @@ sir_simulations.py
 Simulate SIR dynamics on graph and attacked graph.
 
 """
-import os
+
 import EoN
 import pickle
 import argparse
@@ -14,6 +14,7 @@ import pandas as pd
 import networkx as nx
 from collections import Counter
 from multiprocessing import Pool
+import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--graph_type', type=str, default='BA',
@@ -27,12 +28,12 @@ parser.add_argument('--location', type=str, default='random',
 args = parser.parse_args()
 
 
-GAMMA = 0.15                      # recovery rate
-TAU = 0.01                        # transmission rate
-TMAX = 30
+GAMMA = 0.24                      # recovery rate
+TAU = 0.06                        # transmission rate
+TMAX = 100
 numCPU = 7
 LOC = args.location
-numSim = 3000
+numSim = 6
 
 def random_bool(size):
     """Return random boolean values."""
@@ -42,7 +43,7 @@ def random_bool(size):
 def run_sis(original, attacked, budget, num_sim=numSim):
     """Sun SIR simulations on both graphs."""
     graphs = {'original': original, 'attacked': attacked}
-    rows = []
+    rows = {i+1: {'original': None, 'attacked': None} for i in range(num_sim)}
     for name in graphs:
         G = graphs[name]
         numNode = G.order()
@@ -71,20 +72,17 @@ def run_sis(original, attacked, budget, num_sim=numSim):
             #    seed = np.random.choice(SP, size=1)
 
             sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
-           
-
-            #### corresponds to (SIS-*-new)
-            #numSteps = len(sim.t())
-            #inf_ratio_target    = np.sum(sim.summary(S)[1]['I'])  / (len(S) * numSteps)
-            #inf_ratio_bystander = np.sum(sim.summary(SP)[1]['I']) / (len(SP) * numSteps)
-
             
-            ## compute the ratio of infected nodes at the end of the epidemic (corresponds to SIS-*)
-            inf_ratio_target    = Counter(sim.get_statuses(S, -1).values())['I'] / len(S)
-            inf_ratio_bystander = Counter(sim.get_statuses(SP, -1).values())['I'] / len(SP)
-            
-            rows.append((name, inf_ratio_target, inf_ratio_bystander, budget))
-    return pd.DataFrame(rows, columns=['graph', 'ratio targets', 'ratio bystanders', 'budget'])
+            numSteps = len(sim.t())
+            inf_ratio_target    = sum(sim.summary(S)[1]['I']) / (len(S) * numSteps)
+            inf_ratio_bystander = sum(sim.summary(SP)[1]['I']) / (len(SP) * numSteps)
+
+            ### compute the ratio of infected nodes at the end of the epidemic
+            #inf_ratio_target    = Counter(sim.get_statuses(S, -1).values())['I'] / len(S)
+            #inf_ratio_bystander = Counter(sim.get_statuses(SP, -1).values())['I'] / len(SP)
+    
+            rows[ns+1][name] = sim
+    return rows
 
 
 
@@ -94,16 +92,23 @@ def dispatch(params):
 
     with open('../result/utility_max/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'rb') as fid:
         graph_ret = pickle.load(fid)
+    
+    budget = 0.4
+    graph_param = graph_ret[budget]
+    item = graph_param[0]
+    original, attacked = item['original'], item['attacked']
+    ret = run_sis(original, attacked, budget)
+    return ret
 
-    result = []
-    for budget in [0.1, 0.2, 0.3, 0.4, 0.5]:
-        graph_param = graph_ret[budget]
-        for item in graph_param:
-            original, attacked = item['original'], item['attacked']
-            ret = run_sis(original, attacked, budget)
-            result.append(ret)
-    result = pd.concat(result)
-    return result
+    #result = []
+    #for budget in [0.1, 0.2, 0.3, 0.4, 0.5]:
+    #    graph_param = graph_ret[budget]
+    #    for item in graph_param:
+    #        original, attacked = item['original'], item['attacked']
+    #        ret = run_sis(original, attacked, budget)
+    #        result.append(ret)
+    #result = pd.concat(result)
+    #return result
 
 
 
@@ -111,21 +116,20 @@ def dispatch(params):
 
 pool = Pool(processes=numCPU)
 params = []
-expName = ['alpha1=1', 'alpha2=0', 'alpha3=0', 'alpha3=1', 'equalAlpha']
+#expName = ['alpha1=1', 'alpha2=0', 'alpha3=0', 'alpha3=1', 'equalAlpha']
+expName = ['equalAlpha']
 for Key in expName:
     params.append(Key)
 
-ret = pool.map(dispatch, params)
+ret = dispatch(params[0])
 
-folder = '../result/utility_max/min_eigcent_SP/{}-SIS/Gamma-{:.2}---Tau-{:.2f}/'.format(args.graph_type, GAMMA, TAU)
-if not os.path.exists(folder):
-    os.mkdir(folder)
+#ret = pool.map(dispatch, params)
 
-for idx, Key in enumerate(expName):
-    result = ret[idx]
-    fileName = '{}_numExp_{}_SIS_{}.p'.format(args.graph_type, args.numExp, Key) 
-    with open(os.path.join(folder, fileName), 'wb') as fid:
-        pickle.dump(result, fid)
+#for idx, Key in enumerate(expName):
+#    result = ret[idx]
+#    fidName = '../result/utility_max/min_eigcent_SP/{}-SIS-new/Gamma-{:.2}---Tau-{:.2f}/{}_numExp_{}_SIS_{}.p'.format(args.graph_type, GAMMA, TAU, args.graph_type, args.numExp, Key) 
+#    with open(fidName, 'wb') as fid:
+#        pickle.dump(result, fid)
 
 pool.close()
 pool.join()

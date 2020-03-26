@@ -18,27 +18,27 @@ class Threat_Model(nn.Module):
         self.alpha_1, self.alpha_2, self.alpha_3 = Alpha
         self.learning_rate = learning_rate
 
-        # tracks the amount of budget used
+        ## tracks the amount of budget used
         self.used_budget = torch.zeros(1)
         
-        # those eigenvalues in the objective function
         self.lambda1_S_prime = 0
         self.lambda1_S = 0
         self.centrality = 0
         self.lambda1 = 0
         self.Loss = 0
         
-        # the pristine adjacency matrix
         adj = nx.adjacency_matrix(G).todense()
         self.original_adj = torch.tensor(adj, dtype=torch.float32)
         
-        # eigenvals and eigenvectors associated with the largest eig-value of adj
-        v_original = power_method(self.original_adj.data)
-        self.lambda1_original = (v_original @ self.original_adj @ v_original).squeeze()
+        ## eigenvals and eigenvectors associated with the largest eig-value of adj
+        #eigVals, eigVecs = torch.symeig(self.original_adj, eigenvectors=True)
+        #v_original = eigVecs[:, -1] 
+        #self.lambda1_original = torch.max(eigVals)
+        v_original = power_method(self.original_adj)
+        self.lambda1_original = v_original @ self.original_adj @ v_original
 
-        # degree matrix
+        # degree and Laplacian matrices
         D = torch.diag(self.original_adj @ torch.ones(self.numNodes).view(-1, 1).squeeze())
-        # Laplacian matrix
         L = D - self.original_adj
 
         # characteristic vector for sets S and S_prime
@@ -48,13 +48,25 @@ class Threat_Model(nn.Module):
         x_s_prime[self.S_prime] = 1
 
         # select the sub adjacency matrix corresponding to S and S_prime
-        adj_S         = get_submatrix(self.original_adj, self.S, self.S)
-        adj_S_prime   = get_submatrix(self.original_adj, self.S_prime, self.S_prime)
-        v_est_S       = power_method(adj_S)
-        v_est_S_prime = power_method(adj_S_prime)
+        adj_S   = get_submatrix(self.original_adj, self.S, self.S)
+        adj_SP  = get_submatrix(self.original_adj, self.S_prime, self.S_prime)
+
+        self.avgDeg_S  = adj_S.sum() / len(self.S)
+        self.avgDeg_SP = adj_SP.sum() / len(self.S_prime)
+        
+        #eigVals_S, eigVecs_S    = torch.symeig(adj_S, eigenvectors=True) 
+        #v_est_S                 = eigVecs_S[:, -1]
+        #self.lambda1_S_original = torch.max(eigVals_S) 
+        v_est_S = power_method(adj_S)
         self.lambda1_S_original = v_est_S @ adj_S @ v_est_S
-        self.lambda1_S_prime_original = v_est_S_prime @ adj_S_prime @ v_est_S_prime
-    
+        
+        #eigVals_SP, eigVecs_SP  = torch.symeig(adj_S_prime, eigenvectors=True)
+        #v_est_S_prime = eigVecs_SP[:, -1]
+        #self.lambda1_S_prime_original = torch.max(eigVals_SP)
+        v_est_SP = power_method(adj_SP)
+        self.lambda1_SP_original = v_est_SP @ adj_SP @ v_est_SP
+   
+
         ## centrality measure
         vol_S = x_s @ D @ x_s
         vol_S_prime = x_s_prime @ D @ x_s_prime
@@ -62,14 +74,16 @@ class Threat_Model(nn.Module):
         cut_size = x_s @ L @ x_s
         self.centrality_original = cut_size * normalization_const
 
-        ## negative impact
+
+        ## impact on S
         self.impact_S_original = v_original[self.S].sum()
-        # self.impact_S_original = self.lambda1_S_prime_original
+        #self.impact_S_original = -self.lambda1_SP_original 
 
 
         # |lambda1(\tilde{A})-lambda1(A)| <= lambda1(A) * budget_change_ratio
         self.budget = self.lambda1_original * budget_change_ratio
-       
+
+
         ## requires_grad_(True): tells PyTorch to starting tracking the gradients of this parameter
         self.adj_tensor = torch.tensor(adj, dtype=torch.float32).requires_grad_(True)
         self.adj_tensor = nn.Parameter(self.adj_tensor)
@@ -78,18 +92,17 @@ class Threat_Model(nn.Module):
         def _mask_(x):
             x_copy = x.clone()
             x_copy = (1/2) *( x_copy + torch.transpose(x_copy, 0, 1))
-            #x_copy[x_copy > 0] = 1
+            x_copy -= torch.diag(torch.diag(x_copy))
             return x_copy
         self.adj_tensor.register_hook(lambda x: _mask_(x))
-        # self.adj_tensor.register_hook(lambda x: (1/2) * (x + torch.transpose(x, 0, 1)))
+
+
 
     def forward(self):
         """
             Compute loss given current (perturbed) adjacency matrix
         """
-        # degree matrix
         D = torch.diag(self.adj_tensor @ torch.ones(self.numNodes).view(-1, 1).squeeze())
-        # Laplacian matrix
         L = D - self.adj_tensor
 
         # characteristic vector for sets S and S_prime
@@ -99,16 +112,26 @@ class Threat_Model(nn.Module):
         x_s_prime[self.S_prime] = 1
 
         # select the sub adjacency matrix corresponding to S and S_prime
-        adj_tensor_S = get_submatrix(self.adj_tensor, self.S, self.S)
-        adj_tensor_S_prime = get_submatrix(self.adj_tensor, self.S_prime, self.S_prime)
+        adj_tensor_S       = get_submatrix(self.adj_tensor, self.S, self.S)
+        adj_tensor_SP      = get_submatrix(self.adj_tensor, self.S_prime, self.S_prime)
     
         # all sorts of largest eigenvalues 
-        #v_est          = power_method(self.adj_tensor.data)
-        v_est          = torch.symeig(self.adj_tensor, eigenvectors=True)[1][:, -1] 
+        #eigVals, eigVecs         = torch.symeig(self.adj_tensor, eigenvectors=True)
+        #v_est                    = eigVecs[:, -1]
+        v_est = power_method(self.adj_tensor.data)
+        
+        #eigVals_S, eigVecs_S     = torch.symeig(adj_tensor_S, eigenvectors=True)
+        #v_est_S                  = eigVecs_S[:, -1]
+        #self.lambda1_S           = torch.max(eigVals_S) 
         v_est_S        = power_method(adj_tensor_S.data)
-        v_est_S_prime  = power_method(adj_tensor_S_prime.data)
-        self.lambda1_S = v_est_S @ adj_tensor_S @ v_est_S
-        self.lambda1_S_prime = v_est_S_prime @ adj_tensor_S_prime @ v_est_S_prime
+        self.lambda1_S = v_est_S @ adj_tensor_S @ v_est_S 
+
+
+        #eigVals_SP, eigVecs_SP   = torch.symeig(adj_tensor_S_prime, eigenvectors=True)
+        #v_est_S_prime            = eigVecs_SP[:, -1] 
+        #self.lambda1_S_prime     = torch.max(eigVals_SP)
+        v_est_SP        = power_method(adj_tensor_SP.data)
+        self.lambda1_SP = v_est_SP @ adj_tensor_SP @ v_est_SP 
 
     
         ## centrality measure
@@ -121,15 +144,16 @@ class Threat_Model(nn.Module):
 
         ## negative impact
         self.impact_S = v_est[self.S].sum()
-        # self.impact_S = self.lambda1_S_prime
+        #self.impact_S = -self.lambda1_SP
 
         
         # utility function 
-        U1 =  self.alpha_1 * self.lambda1_S
-        U2 =  self.alpha_2 * self.impact_S
+        U1 =  self.alpha_1 * self.lambda1_S / self.avgDeg_S
+        U2 =  self.alpha_2 * self.impact_S 
         U3 =  self.alpha_3 * self.centrality
-        print("U1: {:.4f}    U2: {:.4f}".format(U1.detach().squeeze().numpy(), 
-                                                             U2.detach().squeeze().numpy()))
+        #print("U1: {:.4f}    U2: {:.4f}    U3: {:.4f}".format(U1.detach().squeeze().numpy(), 
+        #                                                      U2.detach().squeeze().numpy(),
+        #                                                      U3.detach().squeeze().numpy()))
                                                         
         self.Loss = -1 * (U1 + U2 + U3)
         return self.Loss
@@ -148,20 +172,18 @@ class Threat_Model(nn.Module):
     # budget consumed in each step
     def get_step_budget(self):
         if self.adj_tensor.grad != None:
-            # perturbation = gradient x learning rate
+            # perturbation = gradient * learning rate
             pert = self.adj_tensor.grad * self.learning_rate
-            spectra = torch.symeig(pert, eigenvectors=True)[0]
-            step_budget = max(
-                    torch.abs(torch.max(spectra)),
-                    torch.abs(torch.min(spectra))
-                    )
+            #v    = power_method(pert)
+            #u    = power_method(-pert)
+            #step_budget = torch.max( torch.abs(v @ pert @ v), torch.abs(u @ (-pert) @ u) )
+            step_budget = estimate_sym_specNorm(pert)
 
-            ## budget used in this step is the operator norm of pert
-            #v1 = power_method(pert, 150)
-            #u1 = power_method(-pert, 150)
-            #step_budget = max(v1.view(1, -1) @ pert    @ v1.view(-1, 1), \
-            #                  u1.view(1, -1) @ (-pert) @ u1.view(-1, 1) )
-
+            #spectra = torch.symeig(pert, eigenvectors=True)[0]
+            #step_budget = max(
+            #        torch.abs(torch.max(spectra)),
+            #        torch.abs(torch.min(spectra))
+            #        )
             return step_budget
 
 
@@ -176,7 +198,7 @@ class Threat_Model(nn.Module):
 
 
     def get_result(self):
-        return self.lambda1_S, self.impact_S, self.centrality
+        return ( self.lambda1_S, self.impact_S, self.centrality )
 
     
     def get_attacked_adj(self):
@@ -193,24 +215,21 @@ class Threat_Model(nn.Module):
             pert = extTensor[0] - self.original_adj
         else:
             pert = self.adj_tensor - self.original_adj
-
-        #v1 = power_method(pert,  100)
-        #u1 = power_method(-pert, 100)
-        #lambda1 = v1.view(1, -1) @ pert    @ v1.view(-1, 1)
-        #eta1    = u1.view(1, -1) @ (-pert) @ u1.view(-1, 1)
-        #spec_norm = max(torch.abs(lambda1), torch.abs(eta1))
         
-        spectra = torch.symeig(pert, eigenvectors=True)[0]
-        spec_norm = max(
-                torch.abs(torch.max(spectra)),
-                torch.abs(torch.min(spectra))
-                )
+        #spectra = torch.symeig(pert, eigenvectors=True)[0]
+        #spec_norm = max(
+        #        torch.abs(torch.max(spectra)),
+        #        torch.abs(torch.min(spectra))
+        #        )
+
+        #v = power_method(pert)
+        #u = power_method(-pert)
+        #spec_norm = torch.max( torch.abs(v @ pert @ v), torch.abs(u @ (-pert) @ u) )
+       
+        spec_norm = estimate_sym_specNorm(pert)
         eigVal_constraint = (spec_norm <= self.budget)
-
         isSymmetric = torch.all(self.adj_tensor == torch.transpose(self.adj_tensor, 0, 1))
-
         isNonnegative = torch.all(self.adj_tensor >= 0)
-
         return (eigVal_constraint and isSymmetric and isNonnegative)
         
 

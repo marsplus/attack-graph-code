@@ -12,12 +12,14 @@ def L_inf_proj(v, r):
 # quotient to estimate the largest eigenvalue
 # and the associated eigenvector
 def power_method(mat, Iter=50):
+    if mat.sum() == 0:
+        return torch.zeros(len(mat))
+
     n = len(mat)
     x = torch.rand(n) 
     x /= torch.norm(x, 2)
 
     flag = 1e-7
-    # while True:
     for i in range(Iter):
         x_new = mat @ x
         x_new /= torch.norm(x_new, 2)
@@ -26,6 +28,27 @@ def power_method(mat, Iter=50):
             break
         x = x_new
     return x_new
+
+
+def estimate_sym_specNorm(mat, Iter=50):
+    if mat.sum() == 0:
+        return 0
+
+    if type(mat) != torch.Tensor:
+        M = torch.tensor(mat, dtype=torch.float32)
+    else:
+        M = mat.clone()
+
+    ## run the power method multiple times
+    ## to make the estimation stable
+    numExp = 20
+    spec_norm = 0
+    for i in range(numExp):
+        v = power_method(M, Iter)
+        u = power_method(-M, Iter)
+        spec_norm += torch.max( torch.abs(v @ M @ v), torch.abs(u @ (-M) @ u) )
+    spec_norm /= numExp
+    return spec_norm
 
 
 def matrix_proj_spectralNorm(mat, epsilon):
@@ -44,8 +67,6 @@ def matrix_vectorize_proj_frobinusNorm(mat, epsilon):
     mat_vec = mat.view(-1, 1)
     mat_proj = mat_vec * epsilon / max(epsilon, mat_vec.norm('fro'))
     mat_proj = mat_proj - torch.diag(torch.diag(mat_proj))
-    mat_proj[mat_proj < 0] = 0
-    mat_proj = (1/2) * (mat_proj + torch.transpose(mat_proj, 0, 1))
     return mat_proj.view(dim)
 
 
