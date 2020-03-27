@@ -27,16 +27,14 @@ parser.add_argument('--location', type=str, default='random',
 args = parser.parse_args()
 
 
-GAMMA = 0.15                      # recovery rate
-TAU = 0.01                        # transmission rate
+GAMMA = 0.24                      # recovery rate
+TAU = 0.06                        # transmission rate
 TMAX = 30
 numCPU = 7
 LOC = args.location
-numSim = 3000
+numSim = 1000
+MODE = 'min_eigcent_SP'
 
-def random_bool(size):
-    """Return random boolean values."""
-    return np.random.randint(2, size=size).astype(bool)
 
 
 def run_sis(original, attacked, budget, num_sim=numSim):
@@ -92,7 +90,7 @@ def dispatch(params):
     Key = params
     print("Current exp: {}".format(Key))
 
-    with open('../result/utility_max/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'rb') as fid:
+    with open('../result/utility_max/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
         graph_ret = pickle.load(fid)
 
     result = []
@@ -117,7 +115,7 @@ for Key in expName:
 
 ret = pool.map(dispatch, params)
 
-folder = '../result/utility_max/min_eigcent_SP/{}-SIS/Gamma-{:.2}---Tau-{:.2f}/'.format(args.graph_type, GAMMA, TAU)
+folder = '../result/utility_max/{}/{}-SIS/Gamma-{:.2}---Tau-{:.2f}/'.format(MODE, args.graph_type, GAMMA, TAU)
 if not os.path.exists(folder):
     os.mkdir(folder)
 
