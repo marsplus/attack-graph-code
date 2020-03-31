@@ -68,8 +68,10 @@ def run_sis(original, attacked, budget, num_sim=numSim):
             #else:
             #    seed = np.random.choice(SP, size=1)
 
-            sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
-           
+            if name == 'attacked':
+                sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
+            else:
+                sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
 
             #### corresponds to (SIS-*-new)
             #numSteps = len(sim.t())
@@ -90,7 +92,7 @@ def dispatch(params):
     Key = params
     print("Current exp: {}".format(Key))
 
-    with open('../result/utility_max/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
+    with open('../result/weighted/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
         graph_ret = pickle.load(fid)
 
     result = []
@@ -115,7 +117,7 @@ for Key in expName:
 
 ret = pool.map(dispatch, params)
 
-folder = '../result/utility_max/{}/{}-SIS/Gamma-{:.2}---Tau-{:.2f}/'.format(MODE, args.graph_type, GAMMA, TAU)
+folder = '../result/weighted/{}/{}-SIS/Gamma-{:.2}---Tau-{:.2f}/'.format(MODE, args.graph_type, GAMMA, TAU)
 if not os.path.exists(folder):
     os.mkdir(folder)
 

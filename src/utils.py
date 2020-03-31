@@ -1,5 +1,17 @@
 import torch
 
+
+## transform th adjacency matrix to 
+## the contact matrix
+def contact_matrix(mat, freq):
+    M = torch.tensor(mat).clone()
+    ## normalization so that each row sums to one
+    M = torch.diag(1 / M.sum(axis=1)) @ M
+    ## generate contact matrix
+    M = 1 - torch.pow(1 - M, freq)
+    return M
+
+
 # project a vector to a L_inf ball
 # with radius r
 def L_inf_proj(v, r):
