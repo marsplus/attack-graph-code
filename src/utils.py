@@ -17,17 +17,41 @@ def power_method(mat, Iter=50):
 
     n = len(mat)
     x = torch.rand(n) 
-    x /= torch.norm(x, 2)
+    x = x / torch.norm(x, 2)
 
     flag = 1e-7
     for i in range(Iter):
         x_new = mat @ x
-        x_new /= torch.norm(x_new, 2)
+        x_new = x_new / torch.norm(x_new, 2)
         Diff = torch.norm(x_new - x, 2)
         if Diff <= flag:
             break
         x = x_new
     return x_new
+
+
+## an iterative method based on Rayleigh 
+## quotient to estimate the largest eigenvalue
+## and the associated eigenvector
+#def power_method(mat, Iter=50):
+#    if mat.sum() == 0:
+#        return torch.zeros(len(mat))
+#
+#    n = len(mat)
+#    x = torch.rand(n) 
+#    x = x /  torch.norm(x, 2)
+#
+#    flag = 1e-7
+#    buff = [x]
+#    for i in range(Iter):
+#        x_new = mat @ buff[-1]
+#        x_new /= torch.norm(x_new, 2)
+#        buff.append(x_new.clone())
+#        Diff = torch.norm(x_new - x, 2)
+#        if Diff <= flag:
+#            break
+#    return buff[-1]
+
 
 
 def estimate_sym_specNorm(mat, Iter=50):

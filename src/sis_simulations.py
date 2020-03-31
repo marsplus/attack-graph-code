@@ -90,7 +90,7 @@ def dispatch(params):
     Key = params
     print("Current exp: {}".format(Key))
 
-    with open('../result/utility_max/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
+    with open('../result/unweighted/{}/{}_numExp_{}_attacked_graphs_{}_newcomm.p'.format(MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
         graph_ret = pickle.load(fid)
 
     result = []
@@ -109,13 +109,13 @@ def dispatch(params):
 
 pool = Pool(processes=numCPU)
 params = []
-expName = ['alpha1=1', 'alpha2=0', 'alpha3=0', 'alpha3=1', 'equalAlpha']
+expName = ['alpha3=0', 'equalAlpha', 'alpha1=1', 'alpha2=0', 'alpha3=1']
 for Key in expName:
     params.append(Key)
 
 ret = pool.map(dispatch, params)
 
-folder = '../result/utility_max/{}/{}-SIS/Gamma-{:.2}---Tau-{:.2f}/'.format(MODE, args.graph_type, GAMMA, TAU)
+folder = '../result/unweighted/{}/{}-SIS-newcomm/Gamma-{:.2}---Tau-{:.2f}/'.format(MODE, args.graph_type, GAMMA, TAU)
 if not os.path.exists(folder):
     os.mkdir(folder)
 

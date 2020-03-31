@@ -19,6 +19,7 @@ class Threat_Model(nn.Module):
 
         adj = nx.adjacency_matrix(G).todense()
         self.adj_tensor = torch.tensor(adj, dtype=torch.float32).requires_grad_(True)
+        self.original_v1 = power_method(self.adj_tensor.data)
         self.adj_tensor = nn.Parameter(self.adj_tensor)
         self.adj_tensor.register_hook(lambda x: x - torch.diag(torch.diag(x)))
 
@@ -31,8 +32,11 @@ class Threat_Model(nn.Module):
         #eigVals, eigVecs = torch.symeig(self.adj_tensor, eigenvectors=True)
         #self.v1 = eigVecs[:, -1]
         if self.flag:
-            self.v1 = power_method(self.adj_tensor.data, 50)
-            Loss = self.v1[self.S].sum()
+            self.v1 = power_method(self.adj_tensor, 50)
+            self.lambda1 = self.v1 @ self.adj_tensor @ self.v1
+            #Loss = -(self.v1[self.S].sum() + self.lambda1)
+            Loss = -(self.lambda1)
+            #print(self.v1[self.S].sum().detach().numpy(), self.lambda1.detach().numpy())
         else:
             eigVals, eigVecs = torch.symeig(self.adj_tensor, eigenvectors=True)
             Loss = torch.max(eigVals) 
@@ -40,7 +44,7 @@ class Threat_Model(nn.Module):
 
         return Loss
 
-n = 10
+n = 375
 G = nx.watts_strogatz_graph(n, 10, 0.2)
 adj = nx.adjacency_matrix(G).todense()
 S = np.random.choice(G.nodes(), 10, replace=False)
@@ -48,13 +52,13 @@ S_prime = list(set(G.nodes()) - set(S))
 S = torch.LongTensor(S)
 S_prime = torch.LongTensor(S_prime)
 Attacker = Threat_Model(S, S_prime, G, True)
-opt = torch.optim.SGD(Attacker.parameters(), lr=0.01)
+opt = torch.optim.SGD(Attacker.parameters(), lr=1)
 
 for i in range(50):
     Loss = Attacker()
     opt.zero_grad()
     Loss.backward()
     opt.step()
-    print(Loss)
+    #print(Loss)
 
 

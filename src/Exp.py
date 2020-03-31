@@ -61,7 +61,7 @@ def select_comm(graph, isEmail=False, mapping=None):
     else:
         all_comms = list(greedy_modularity_communities(graph))
         all_comms = sorted(all_comms, key=lambda x: len(x))
-        comm = list(all_comms[math.floor(len(all_comms) * 0.5)])
+        comm = list(all_comms[math.floor(len(all_comms) * 0.2)])
         assert(len(comm) != 0)
     return comm
 
@@ -78,7 +78,7 @@ def gen_graph(graph_type, graph_id=1):
     elif graph_type == 'Facebook':
         G = nx.read_edgelist('../data/facebook_combined.txt', nodetype=int)
     elif graph_type == 'Stoc-Block':
-        sizes = [25, 50, 100, 200]
+        sizes = [25, 50, 75, 100, 125]
         num_c = len(sizes)
         within_p = 0.1
         out_p = 0.001
@@ -207,8 +207,7 @@ def projection_attack(Attacker, Optimizer, Iter=50):
 
 
 
-def grid_search_hyperparameters():
-    ret = []
+def launch_attack():
     alpha_1, alpha_2, alpha_3 = MAPPING[args.mode]
     Alpha = [alpha_1, alpha_2, alpha_3]
     print("alpha_1: {:.4f}      alpha_2: {:.4f}     alpha_3: {:.4f}\n".format(alpha_1, alpha_2, alpha_3))
@@ -230,8 +229,8 @@ def grid_search_hyperparameters():
     utility = Attacker.get_utility()
 
     ## record all the statistics we are interested in
-    ret.append((utility_ret, lambda1_S_ret, impact_S_ret, centrality_ret, budget_change_ratio, \
-        Alpha, avgDegDiff, avgDegDiff_S, avgDegDiff_S_prime, adjNormDiff, addedEdgesRatio, Attacker))
+    ret = (utility_ret, lambda1_S_ret, impact_S_ret, centrality_ret, budget_change_ratio, \
+        Alpha, avgDegDiff, avgDegDiff_S, avgDegDiff_S_prime, adjNormDiff, addedEdgesRatio, Attacker)
     print("Budget: {:.2f}%  \
            lambda1_S: {:.4f}%  \
            negative impact: {:.4f}% \
@@ -387,9 +386,8 @@ for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
         S_prime = torch.LongTensor(S_prime)
 
         # exhaustively search the best set of hyper-parameters
-        ret = grid_search_hyperparameters()
-        opt_sol = max(ret, key=lambda x: x[0])
-
+        opt_sol = launch_attack()
+        result[budget_change_ratio].append(opt_sol)
 
         ## attacked graphs
         Attacker = opt_sol[-1]
@@ -401,14 +399,14 @@ for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
         graph_ret[budget_change_ratio].append({'original': G, 'attacked': G_attacked})
 
 
-## save attacked graphs to disk
-#Key = args.mode
-#with open('../result/utility_max/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
-#    pickle.dump(graph_ret, fid)
-#
-#
-#with open('../result/utility_max/min_eigcent_SP/{}_numExp_{}_ret_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
-#    pickle.dump(ret, fid)
+# save attacked graphs to disk
+Key = args.mode
+with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}_newcomm.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+    pickle.dump(graph_ret, fid)
+
+
+with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_ret_{}_newcomm.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+    pickle.dump(result, fid)
 
 
 
