@@ -3,10 +3,9 @@ import torch
 
 ## transform th adjacency matrix to 
 ## the contact matrix
-def contact_matrix(mat, freq):
-    M = torch.tensor(mat).clone()
+def contact_matrix(mat, freq=10):
     ## normalization so that each row sums to one
-    M = torch.diag(1 / M.sum(axis=1)) @ M
+    M = torch.diag(1 / mat.sum(axis=1)) @ mat
     ## generate contact matrix
     M = 1 - torch.pow(1 - M, freq)
     return M
@@ -29,12 +28,12 @@ def power_method(mat, Iter=50):
 
     n = len(mat)
     x = torch.rand(n) 
-    x /= torch.norm(x, 2)
+    x = x / torch.norm(x, 2)
 
     flag = 1e-7
     for i in range(Iter):
         x_new = mat @ x
-        x_new /= torch.norm(x_new, 2)
+        x_new = x_new / torch.norm(x_new, 2)
         Diff = torch.norm(x_new - x, 2)
         if Diff <= flag:
             break

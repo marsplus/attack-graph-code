@@ -25,8 +25,6 @@ parser.add_argument('--mode', type=str, default='equalAlpha',
                     help='trade-off parameters mode')
 parser.add_argument('--weighted_graph', type=bool, default=True,
                     help='weighted graphs or not')
-parser.add_argument('--freq', type=int, default=10,
-                    help='how frequent a node tries to contact its neighbors')
 args = parser.parse_args()
 
 
@@ -120,11 +118,8 @@ def SGD_attack(Attacker, Optimizer, Iter=100):
             break
     print("SGD iterations: {}".format(cnt))
     
-    if not Attacker.weighted_graph:
-        Attacker.adj_tensor.data, addedEdges = rounding(Attacker)
-    else:
-        Attacker.adj_tensor.data[Attacker.adj_tensor.data < 0] = 0
-        addedEdges = 0
+    Attacker.adj_tensor.data[Attacker.adj_tensor.data < 0] = 0
+    addedEdges = 0
 
     Attacker()
     #assert(Attacker.check_constraint())
@@ -277,11 +272,10 @@ for budget_change_ratio in [0.2]:
         ## attacked graphs
         Attacker = opt_sol[-1]
         Adj_attacked = Attacker.get_attacked_adj()
-        if Attacker.weighted_graph:
-            G_attacked = nx.from_numpy_matrix(contact_matrix(Adj_attacked).numpy())
-            G          = nx.from_numpy_matrix(Attacker.original_adj) 
-        else:
-            G_attacked = nx.from_numpy_matrix(Adj_attacked.numpy())
+        R = contact_matrix(Adj_attacked) 
+
+        G_attacked = nx.from_numpy_matrix(R.numpy(), create_using=nx.Digraph)
+        G          = nx.from_numpy_matrix(Attacker.original_adj.numpy()) 
 
         targets = [True if i in S else False for i in range(G.order())]
         targets = {idx: {'target': targets[idx]} for idx, _ in enumerate(targets)}

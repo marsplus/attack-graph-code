@@ -4,6 +4,7 @@ import torch.nn as nn
 import networkx as nx
 from utils import *
 
+LAMBDA = 10
 
 class Threat_Model(nn.Module):
     def __init__(self, S, S_prime, Alpha, budget_change_ratio, learning_rate, G, weighted_graph):
@@ -31,10 +32,15 @@ class Threat_Model(nn.Module):
         
         adj = nx.adjacency_matrix(G).todense()
         self.original_adj = torch.tensor(adj, dtype=torch.float32)
+        self.original_R   = contact_matrix(self.original_adj, LAMBDA)
+
+        ## largest eig-val of original adj
+        v_ = power_method(self.original_adj)
+        lambda1_adj = v_ @ self.original_adj @ v_
         
-        ## eigenvals and eigenvectors associated with the largest eig-value of adj
-        v_original = power_method(self.original_adj)
-        self.lambda1_original = v_original @ self.original_adj @ v_original
+        ## eigenvals and eigenvectors associated with the largest eig-value of R
+        v_original = power_method(self.original_R)
+        self.lambda1_original = v_original @ self.original_R @ v_original
 
         # degree and Laplacian matrices
         D = torch.diag(self.original_adj @ torch.ones(self.numNodes))
@@ -47,8 +53,8 @@ class Threat_Model(nn.Module):
         x_s_prime[self.S_prime] = 1
 
         # select the sub-adjacency matrix corresponding to S and S_prime
-        adj_S   = get_submatrix(self.original_adj, self.S, self.S)
-        adj_SP  = get_submatrix(self.original_adj, self.S_prime, self.S_prime)
+        adj_S   = get_submatrix(self.original_R, self.S, self.S)
+        adj_SP  = get_submatrix(self.original_R, self.S_prime, self.S_prime)
 
         self.avgDeg_S  = adj_S.sum() / len(self.S)
         self.avgDeg_SP = adj_SP.sum() / len(self.S_prime)
@@ -72,7 +78,7 @@ class Threat_Model(nn.Module):
         #self.impact_S_original = -self.lambda1_SP_original 
 
         # |lambda1(\tilde{A})-lambda1(A)| <= lambda1(A) * budget_change_ratio
-        self.budget = self.lambda1_original * budget_change_ratio
+        self.budget = lambda1_adj * budget_change_ratio
 
         ## requires_grad_(True): tells PyTorch to track the gradients of this parameter
         self.adj_tensor = torch.tensor(adj, dtype=torch.float32).requires_grad_(True)
@@ -105,18 +111,18 @@ class Threat_Model(nn.Module):
         x_s_prime = torch.zeros(self.numNodes)
         x_s_prime[self.S_prime] = 1
 
+        R = contact_matrix(self.adj_tensor, LAMBDA)
+
         # select the sub adjacency matrix corresponding to S and S_prime
-        adj_tensor_S   = get_submatrix(self.adj_tensor, self.S, self.S)
-        adj_tensor_SP  = get_submatrix(self.adj_tensor, self.S_prime, self.S_prime)
+        adj_tensor_S   = get_submatrix(R, self.S, self.S)
+        adj_tensor_SP  = get_submatrix(R, self.S_prime, self.S_prime)
     
         # all sorts of largest eigenvalues 
-        v_est = power_method(self.adj_tensor.data)
+        v_est = power_method(R)
         
-        #eigVals_S, eigVecs_S     = torch.symeig(adj_tensor_S, eigenvectors=True)
-        v_est_S        = power_method(adj_tensor_S.data)
+        v_est_S        = power_method(adj_tensor_S)
         self.lambda1_S = v_est_S @ adj_tensor_S @ v_est_S 
 
-        #eigVals_SP, eigVecs_SP   = torch.symeig(adj_tensor_S_prime, eigenvectors=True)
         v_est_SP        = power_method(adj_tensor_SP.data)
         self.lambda1_SP = v_est_SP @ adj_tensor_SP @ v_est_SP 
 
@@ -134,12 +140,12 @@ class Threat_Model(nn.Module):
 
         
         # utility function 
-        U1 =  self.alpha_1 * self.lambda1_S / self.avgDeg_S
+        U1 =  self.alpha_1 * self.lambda1_S 
         U2 =  self.alpha_2 * self.impact_S 
         U3 =  self.alpha_3 * self.centrality
-        #print("U1: {:.4f}    U2: {:.4f}    U3: {:.4f}".format(U1.detach().squeeze().numpy(), 
-        #                                                      U2.detach().squeeze().numpy(),
-        #                                                      U3.detach().squeeze().numpy()))
+        print("U1: {:.4f}    U2: {:.4f}    U3: {:.4f}".format(U1.detach().squeeze().numpy(), 
+                                                              U2.detach().squeeze().numpy(),
+                                                              U3.detach().squeeze().numpy()))
                                                         
         self.Loss = -1 * (U1 + U2 + U3)
         return self.Loss
