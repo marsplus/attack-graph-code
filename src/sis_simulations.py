@@ -28,11 +28,11 @@ args = parser.parse_args()
 
 
 GAMMA = 0.24                      # recovery rate
-TAU = 0.06                        # transmission rate
-TMAX = 30
+TAU = 0.2                        # transmission rate
+TMAX = 50
 numCPU = 7
 LOC = args.location
-numSim = 1000
+numSim = 10000
 MODE = 'min_eigcent_SP'
 
 
@@ -71,7 +71,10 @@ def run_sis(original, attacked, budget, num_sim=numSim):
             if name == 'attacked':
                 sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
             else:
-                sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
+                if args.graph_type not in  ['Airport', 'Protein']:
+                    sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
+                else:
+                    sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
 
             #### corresponds to (SIS-*-new)
             #numSteps = len(sim.t())
@@ -82,8 +85,8 @@ def run_sis(original, attacked, budget, num_sim=numSim):
             ## compute the ratio of infected nodes at the end of the epidemic (corresponds to SIS-*)
             inf_ratio_target    = Counter(sim.get_statuses(S, -1).values())['I'] / len(S)
             inf_ratio_bystander = Counter(sim.get_statuses(SP, -1).values())['I'] / len(SP)
-            
             rows.append((name, inf_ratio_target, inf_ratio_bystander, budget))
+    
     return pd.DataFrame(rows, columns=['graph', 'ratio targets', 'ratio bystanders', 'budget'])
 
 

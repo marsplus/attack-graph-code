@@ -23,8 +23,9 @@ parser.add_argument('--graph_type', type=str, default='BA',
                     help='graph type')
 parser.add_argument('--mode', type=str, default='equalAlpha',
                     help='trade-off parameters mode')
-parser.add_argument('--weighted_graph', type=bool, default=True,
-                    help='weighted graphs or not')
+parser.add_argument('--save_result', type=int, default=1,
+                    help='whether or not to save the result to the disk')
+
 args = parser.parse_args()
 
 
@@ -37,6 +38,7 @@ MAPPING = {
         'alpha2=0': [1/3, 0, 1/3],
         'alpha3=0': [1/3, 1/3, 0],
         'alpha3=1': [0, 0, 1/3],
+        'alpha1=0': [0, 1/3, 1/3]
         }
 
 
@@ -44,8 +46,8 @@ MAPPING = {
 # run a community detection algorithm, then
 # randomly pick one community as S.
 # note that the size of S is usually less than 100
-def select_comm(graph, isEmail=False, mapping=None):
-    if isEmail:
+def select_comm(graph, mapping=None):
+    if args.graph_type == 'Email':
         # read into community info
         with open('../data/email-Eu-core-department-labels-cc.txt', 'r') as fid:
             f_label = fid.readlines()
@@ -58,6 +60,13 @@ def select_comm(graph, isEmail=False, mapping=None):
                 comm_to_nodes[commID].append(mapping[nodeID])
         comm_size = sorted([(key, len(comm_to_nodes[key])) for key in comm_to_nodes.keys()], key=lambda x: x[1])
         comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.5)][0]]
+    elif args.graph_type == 'Airport':
+        deg = list(dict(graph.degree()).items())
+        deg = sorted(deg, key=lambda x: x[1])
+        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.8)][0])) 
+        #comm = list(graph.neighbors(deg[-1][0]))
+    elif args.graph_type == 'Protein':
+        comm = [142, 146, 150, 151, 25, 145, 12, 26, 6, 144, 13, 143]
     else:
         all_comms = list(greedy_modularity_communities(graph))
         all_comms = sorted(all_comms, key=lambda x: len(x))
@@ -78,7 +87,7 @@ def gen_graph(graph_type, graph_id=1):
     elif graph_type == 'Facebook':
         G = nx.read_edgelist('../data/facebook_combined.txt', nodetype=int)
     elif graph_type == 'Stoc-Block':
-        sizes = [25, 50, 100, 200]
+        sizes = [25, 50, 75, 100, 125]
         num_c = len(sizes)
         within_p = 0.1
         out_p = 0.001
@@ -93,6 +102,20 @@ def gen_graph(graph_type, graph_id=1):
         G = nx.relabel_nodes(G, mapping)
     elif graph_type == 'BTER':
         G = nx.read_edgelist('../data/BTER_{:02d}.txt'.format(graph_id), nodetype=int)
+    elif graph_type == 'Airport':
+        G = nx.read_edgelist('../data/US-airport.txt', nodetype=int, data=(('weight',float),) )
+        comps = nx.connected_components(G)
+        comp_max_idx = max(comps, key=lambda x: len(x))
+        G = G.subgraph(comp_max_idx)
+        mapping = {item: idx for idx, item in enumerate(G.nodes())}
+        G = nx.relabel_nodes(G, mapping)
+        Adj = nx.adjacency_matrix(G).todense() 
+        Adj /= Adj.max()
+        G = nx.from_numpy_matrix(Adj)
+    elif graph_type == 'Protein':
+        with open('../data/protein_network.p', 'rb') as fid:
+            G = pickle.load(fid)
+            G.remove_edges_from(nx.selfloop_edges(G))
     return G
 
 
@@ -108,7 +131,7 @@ def SGD_attack(Attacker, Optimizer, Iter=100):
 
         budget_this_step = Attacker.get_step_budget()
         current_used_budget = Attacker.get_used_budget()
-
+        
         if current_used_budget + budget_this_step <= Attacker_budget:
             Optimizer.step()
             Attacker.update_used_budget(budget_this_step)
@@ -117,7 +140,7 @@ def SGD_attack(Attacker, Optimizer, Iter=100):
         else:
             break
     print("SGD iterations: {}".format(cnt))
-    
+   
     Attacker.adj_tensor.data[Attacker.adj_tensor.data < 0] = 0
     addedEdges = 0
 
@@ -148,7 +171,7 @@ def launch_attach():
     Alpha = [alpha_1, alpha_2, alpha_3]
     print("alpha_1: {:.4f}      alpha_2: {:.4f}     alpha_3: {:.4f}\n".format(alpha_1, alpha_2, alpha_3))
 
-    Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G, args.weighted_graph)
+    Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G)
     #Optimizer = torch.optim.Adam(Attacker.parameters(), lr=learning_rate)
     Optimizer = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
 
@@ -246,8 +269,8 @@ def rounding(Attacker):
 result = defaultdict(list)
 graph_ret = defaultdict(list)
 
-#for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
-for budget_change_ratio in [0.2]:
+for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
+#for budget_change_ratio in [0.5]:
     for i in range(args.numExp):
         G = gen_graph(args.graph_type, i)
         mapping = {item: idx for idx, item in enumerate(G.nodes())}
@@ -255,7 +278,7 @@ for budget_change_ratio in [0.2]:
         adj = nx.adjacency_matrix(G).todense()
 
         if args.graph_type == "Email":
-            S = select_comm(G, True, mapping)
+            S = select_comm(G, mapping)
         else:
             S = select_comm(G)
 
@@ -272,11 +295,7 @@ for budget_change_ratio in [0.2]:
         ## attacked graphs
         Attacker = opt_sol[-1]
         Adj_attacked = Attacker.get_attacked_adj()
-        R = contact_matrix(Adj_attacked) 
-
-        G_attacked = nx.from_numpy_matrix(R.numpy(), create_using=nx.Digraph)
-        G          = nx.from_numpy_matrix(Attacker.original_adj.numpy()) 
-
+        G_attacked = nx.from_numpy_matrix(Attacker.get_attacked_adj().numpy())
         targets = [True if i in S else False for i in range(G.order())]
         targets = {idx: {'target': targets[idx]} for idx, _ in enumerate(targets)}
         nx.set_node_attributes(G_attacked, targets)
@@ -284,14 +303,15 @@ for budget_change_ratio in [0.2]:
         graph_ret[budget_change_ratio].append({'original': G, 'attacked': G_attacked})
 
 
-## save attacked graphs to disk
-#Key = args.mode
-#with open('../result/weighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
-#    pickle.dump(graph_ret, fid)
-#
-#
-#with open('../result/weighted/min_eigcent_SP/{}_numExp_{}_ret_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
-#    pickle.dump(result, fid)
+if args.save_result:
+    # save attacked graphs to disk
+    Key = args.mode
+    with open('../result/weighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+        pickle.dump(graph_ret, fid)
+
+
+    with open('../result/weighted/min_eigcent_SP/{}_numExp_{}_ret_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+        pickle.dump(result, fid)
 
 
 

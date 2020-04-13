@@ -3,12 +3,8 @@ import torch
 
 ## transform th adjacency matrix to 
 ## the contact matrix
-def contact_matrix(mat, freq=10):
-    ## normalization so that each row sums to one
-    M = torch.diag(1 / mat.sum(axis=1)) @ mat
-    ## generate contact matrix
-    M = 1 - torch.pow(1 - M, freq)
-    return M
+def contact_matrix(mat, B):
+    return mat / B
 
 
 # project a vector to a L_inf ball
