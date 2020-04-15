@@ -25,6 +25,8 @@ parser.add_argument('--graph_type', type=str, default='BA',
                     help='graph type')
 parser.add_argument('--mode', type=str, default='equalAlpha',
                     help='trade-off parameters mode')
+parser.add_argument('--save_result', type=int, default=1,
+                    help='whether or not to save the result to the disk')
 args = parser.parse_args()
 
 
@@ -43,9 +45,8 @@ MAPPING = {
 
 # run a community detection algorithm, then
 # randomly pick one community as S.
-# note that the size of S is usually less than 100
-def select_comm(graph, isEmail=False, mapping=None):
-    if isEmail:
+def select_comm(graph, mapping=None):
+    if args.graph_type == 'Email':
         # read into community info
         with open('../data/email-Eu-core-department-labels-cc.txt', 'r') as fid:
             f_label = fid.readlines()
@@ -58,6 +59,10 @@ def select_comm(graph, isEmail=False, mapping=None):
                 comm_to_nodes[commID].append(mapping[nodeID])
         comm_size = sorted([(key, len(comm_to_nodes[key])) for key in comm_to_nodes.keys()], key=lambda x: x[1])
         comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.75)][0]]
+    elif args.graph_type == 'Retina':
+        deg = list(dict(graph.degree()).items())
+        deg = sorted(deg, key=lambda x: x[1])
+        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.8)][0])) 
     else:
         all_comms = list(greedy_modularity_communities(graph))
         all_comms = sorted(all_comms, key=lambda x: len(x))
@@ -93,6 +98,13 @@ def gen_graph(graph_type, graph_id=1):
         G = nx.relabel_nodes(G, mapping)
     elif graph_type == 'BTER':
         G = nx.read_edgelist('../data/BTER_{:02d}.txt'.format(graph_id), nodetype=int)
+    elif graph_type == 'Retina':
+        G = nx.read_edgelist('../data/retina.txt', nodetype=int)
+        comps = nx.connected_components(G)
+        comp_max_idx = max(comps, key=lambda x: len(x))
+        G = G.subgraph(comp_max_idx)
+        mapping = {item: idx for idx, item in enumerate(G.nodes())}
+        G = nx.relabel_nodes(G, mapping)
     return G
 
 
@@ -375,7 +387,7 @@ for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
         adj = nx.adjacency_matrix(G).todense()
 
         if args.graph_type == "Email":
-            S = select_comm(G, True, mapping)
+            S = select_comm(G, mapping)
         else:
             S = select_comm(G)
 
@@ -399,14 +411,15 @@ for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
         graph_ret[budget_change_ratio].append({'original': G, 'attacked': G_attacked})
 
 
-# save attacked graphs to disk
-Key = args.mode
-with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}_newcomm.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
-    pickle.dump(graph_ret, fid)
+if args.save_result:
+    # save attacked graphs to disk
+    Key = args.mode
+    with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+        pickle.dump(graph_ret, fid)
 
 
-with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_ret_{}_newcomm.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
-    pickle.dump(result, fid)
+    with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_ret_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+        pickle.dump(result, fid)
 
 
 
