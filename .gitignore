@@ -9,3 +9,4 @@ src/.ipynb_checkpoints*
 src/flycheck*
 result/*
 data/*.raw
+.DS_Store/*
