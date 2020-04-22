@@ -27,12 +27,12 @@ parser.add_argument('--location', type=str, default='random',
 args = parser.parse_args()
 
 
-GAMMA = 0.24                      # recovery rate
-TAU = 0.2                        # transmission rate
-TMAX = 50
+GAMMA = 0.24                       # recovery rate
+TAU = 0.2                          # transmission rate
+TMAX = 30
 numCPU = 7
 LOC = args.location
-numSim = 10000
+numSim = 5000
 MODE = 'min_eigcent_SP'
 
 
@@ -71,7 +71,7 @@ def run_sis(original, attacked, budget, num_sim=numSim):
             if name == 'attacked':
                 sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
             else:
-                if args.graph_type not in  ['Airport', 'Protein']:
+                if args.graph_type not in ['Airport', 'Protein', 'Brain']:
                     sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
                 else:
                     sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
@@ -120,7 +120,7 @@ for Key in expName:
 
 ret = pool.map(dispatch, params)
 
-folder = '../result/weighted/{}/{}-SIS/Gamma-{:.2}---Tau-{:.2f}/'.format(MODE, args.graph_type, GAMMA, TAU)
+folder = '../result/weighted/{}/{}-SIS/Gamma-{:.2f}---Tau-{:.2f}/'.format(MODE, args.graph_type, GAMMA, TAU)
 if not os.path.exists(folder):
     os.mkdir(folder)
 

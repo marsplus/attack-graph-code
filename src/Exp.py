@@ -63,10 +63,12 @@ def select_comm(graph, mapping=None):
     elif args.graph_type == 'Airport':
         deg = list(dict(graph.degree()).items())
         deg = sorted(deg, key=lambda x: x[1])
-        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.8)][0])) 
+        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.99)][0])) 
         #comm = list(graph.neighbors(deg[-1][0]))
     elif args.graph_type == 'Protein':
         comm = [142, 146, 150, 151, 25, 145, 12, 26, 6, 144, 13, 143]
+    elif args.graph_type == 'Brain':
+        comm = list(range(len(graph)-100, len(graph)))
     else:
         all_comms = list(greedy_modularity_communities(graph))
         all_comms = sorted(all_comms, key=lambda x: len(x))
@@ -86,6 +88,8 @@ def gen_graph(graph_type, graph_id=1):
         G.remove_edges_from(nx.selfloop_edges(G))
     elif graph_type == 'Facebook':
         G = nx.read_edgelist('../data/facebook_combined.txt', nodetype=int)
+    elif graph_type == 'Brain':
+        G = nx.from_numpy_array(np.loadtxt('../data/Brain.txt'))
     elif graph_type == 'Stoc-Block':
         sizes = [25, 50, 75, 100, 125]
         num_c = len(sizes)

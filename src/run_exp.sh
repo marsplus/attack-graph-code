@@ -11,7 +11,7 @@
 #python sis_simulations.py --graph_type=Email --numExp=1 
 
 
-graph_type=Protein
+graph_type=Brain
 numExp=1
 #python Exp.py --graph_type=$graph_type --mode=equalAlpha --numExp=$numExp
 #python Exp.py --graph_type=$graph_type --mode=alpha1=1   --numExp=$numExp
