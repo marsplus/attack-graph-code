@@ -11,8 +11,8 @@
 #python sis_simulations.py --graph_type=Email --numExp=1 
 
 
-graph_type=Retina
-numExp=1
+graph_type=$1
+numExp=$2
 #python Exp.py --graph_type=$graph_type --mode=equalAlpha --numExp=$numExp
 #python Exp.py --graph_type=$graph_type --mode=alpha1=1   --numExp=$numExp
 #python Exp.py --graph_type=$graph_type --mode=alpha2=0   --numExp=$numExp
