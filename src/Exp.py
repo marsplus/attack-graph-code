@@ -59,15 +59,15 @@ def select_comm(graph, mapping=None):
                 comm_to_nodes[commID].append(mapping[nodeID])
         comm_size = sorted([(key, len(comm_to_nodes[key])) for key in comm_to_nodes.keys()], key=lambda x: x[1])
         comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.75)][0]]
-    elif args.graph_type == 'Retina':
-        deg = list(dict(graph.degree()).items())
-        deg = sorted(deg, key=lambda x: x[1])
-        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.8)][0])) 
     else:
-        all_comms = list(greedy_modularity_communities(graph))
-        all_comms = sorted(all_comms, key=lambda x: len(x))
-        comm = list(all_comms[math.floor(len(all_comms) * 0.2)])
-        assert(len(comm) != 0)
+        #all_comms = list(greedy_modularity_communities(graph))
+        #all_comms = sorted(all_comms, key=lambda x: len(x))
+        #comm = list(all_comms[math.floor(len(all_comms) * 0.2)])
+        #assert(len(comm) != 0)
+        
+        deg = list(dict(graph.degree()).items())
+        deg = sorted(deg, key=lambda x: x[1]) 
+        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.9)][0]))
     return comm
 
 

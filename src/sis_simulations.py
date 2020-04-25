@@ -32,7 +32,7 @@ TAU = 0.2                        # transmission rate
 TMAX = 30
 numCPU = 7
 LOC = args.location
-numSim = 3000
+numSim = 2000
 MODE = 'min_eigcent_SP'
 
 
