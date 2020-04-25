@@ -28,11 +28,11 @@ args = parser.parse_args()
 
 
 GAMMA = 0.24                       # recovery rate
-TAU = 0.2                          # transmission rate
+TAU = 0.3                          # transmission rate
 TMAX = 30
 numCPU = 7
 LOC = args.location
-numSim = 5000
+numSim = 2000
 MODE = 'min_eigcent_SP'
 
 
