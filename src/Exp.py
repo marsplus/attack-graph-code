@@ -58,7 +58,7 @@ def select_comm(graph, mapping=None):
             else:
                 comm_to_nodes[commID].append(mapping[nodeID])
         comm_size = sorted([(key, len(comm_to_nodes[key])) for key in comm_to_nodes.keys()], key=lambda x: x[1])
-        comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.75)][0]]
+        comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.5)][0]]
     else:
         #all_comms = list(greedy_modularity_communities(graph))
         #all_comms = sorted(all_comms, key=lambda x: len(x))
@@ -378,26 +378,25 @@ def rounding(Attacker):
 result = defaultdict(list)
 graph_ret = defaultdict(list)
 
-for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
-#for budget_change_ratio in [0.5]:
-    for i in range(args.numExp):
-        G = gen_graph(args.graph_type, i)
-        mapping = {item: idx for idx, item in enumerate(G.nodes())}
-        G = nx.relabel_nodes(G, mapping)
-        adj = nx.adjacency_matrix(G).todense()
+for i in range(args.numExp):
+    G = gen_graph(args.graph_type, i)
+    mapping = {item: idx for idx, item in enumerate(G.nodes())}
+    G = nx.relabel_nodes(G, mapping)
+    adj = nx.adjacency_matrix(G).todense()
 
-        if args.graph_type == "Email":
-            S = select_comm(G, mapping)
-        else:
-            S = select_comm(G)
+    if args.graph_type == "Email":
+        S = select_comm(G, mapping)
+    else:
+        S = select_comm(G)
 
-        print("---Comm size: {}    Graph size: {}---".format(len(S), len(G)))
+    print("---Comm size: {}    Graph size: {}---".format(len(S), len(G)))
 
-        S_prime = list(set(G.nodes()) - set(S))
-        S = torch.LongTensor(S)
-        S_prime = torch.LongTensor(S_prime)
+    S_prime = list(set(G.nodes()) - set(S))
+    S = torch.LongTensor(S)
+    S_prime = torch.LongTensor(S_prime)
 
-        # exhaustively search the best set of hyper-parameters
+    for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
+    #for budget_change_ratio in [0.5]:
         opt_sol = launch_attack()
         result[budget_change_ratio].append(opt_sol)
 
