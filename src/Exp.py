@@ -63,7 +63,7 @@ def select_comm(graph, mapping=None):
     elif args.graph_type == 'Airport':
         deg = list(dict(graph.degree()).items())
         deg = sorted(deg, key=lambda x: x[1])
-        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.99)][0])) 
+        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.9)][0])) 
         #comm = list(graph.neighbors(deg[-1][0]))
     elif args.graph_type == 'Protein':
         comm = [142, 146, 150, 151, 25, 145, 12, 26, 6, 144, 13, 143]
@@ -273,26 +273,25 @@ def rounding(Attacker):
 result = defaultdict(list)
 graph_ret = defaultdict(list)
 
-for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
-#for budget_change_ratio in [0.5]:
-    for i in range(args.numExp):
-        G = gen_graph(args.graph_type, i)
-        mapping = {item: idx for idx, item in enumerate(G.nodes())}
-        G = nx.relabel_nodes(G, mapping)
-        adj = nx.adjacency_matrix(G).todense()
+for i in range(args.numExp):
+    G = gen_graph(args.graph_type, i)
+    mapping = {item: idx for idx, item in enumerate(G.nodes())}
+    G = nx.relabel_nodes(G, mapping)
+    adj = nx.adjacency_matrix(G).todense()
 
-        if args.graph_type == "Email":
-            S = select_comm(G, mapping)
-        else:
-            S = select_comm(G)
+    if args.graph_type == "Email":
+        S = select_comm(G, mapping)
+    else:
+        S = select_comm(G)
 
-        print("---Comm size: {}    Graph size: {}---".format(len(S), len(G)))
+    print("---Comm size: {}    Graph size: {}---".format(len(S), len(G)))
 
-        S_prime = list(set(G.nodes()) - set(S))
-        S = torch.LongTensor(S)
-        S_prime = torch.LongTensor(S_prime)
+    S_prime = list(set(G.nodes()) - set(S))
+    S = torch.LongTensor(S)
+    S_prime = torch.LongTensor(S_prime)
 
-        # exhaustively search the best set of hyper-parameters
+    for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
+    #for budget_change_ratio in [0.5]:
         opt_sol = launch_attach()
         result[budget_change_ratio].append(opt_sol)
 
