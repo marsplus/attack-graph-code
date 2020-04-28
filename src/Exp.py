@@ -67,7 +67,7 @@ def select_comm(graph, mapping=None):
         
         deg = list(dict(graph.degree()).items())
         deg = sorted(deg, key=lambda x: x[1]) 
-        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.9)][0]))
+        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.99)][0]))
     return comm
 
 
@@ -413,11 +413,11 @@ for i in range(args.numExp):
 if args.save_result:
     # save attacked graphs to disk
     Key = args.mode
-    with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+    with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}_minBudget.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
         pickle.dump(graph_ret, fid)
 
 
-    with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_ret_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+    with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_ret_{}_minBudget.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
         pickle.dump(result, fid)
 
 
