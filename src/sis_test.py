@@ -33,7 +33,7 @@ TAU = 0.06                        # transmission rate
 TMAX = 100
 numCPU = 7
 LOC = args.location
-numSim = 6
+numSim = 1
 
 def random_bool(size):
     """Return random boolean values."""
@@ -90,7 +90,7 @@ def dispatch(params):
     Key = params
     print("Current exp: {}".format(Key))
 
-    with open('../result/utility_max/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'rb') as fid:
+    with open('../result/unweighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'rb') as fid:
         graph_ret = pickle.load(fid)
     
     budget = 0.4

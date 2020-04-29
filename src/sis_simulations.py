@@ -24,15 +24,19 @@ parser.add_argument('--budget', type=float, default=1,
                 help='attacker budget')
 parser.add_argument('--location', type=str, default='random',
                 help='locatioin of initial seed')
+parser.add_argument('--gamma', type=float, default='0.24',
+                help='gamma')
+parser.add_argument('--tau', type=float, default='0.2',
+                help='tau')
 args = parser.parse_args()
 
 
-GAMMA = 0.24                       # recovery rate
-TAU = 0.06                         # transmission rate
-TMAX = 30
+GAMMA = args.gamma                       # recovery rate
+TAU = args.tau                           # transmission rate
+TMAX = 50
 numCPU = 7
 LOC = args.location
-numSim = 5000
+numSim = 3000
 MODE = 'min_eigcent_SP'
 
 
@@ -83,8 +87,11 @@ def run_sis(original, attacked, budget, num_sim=numSim):
 
             
             ## compute the ratio of infected nodes at the end of the epidemic (corresponds to SIS-*)
-            inf_ratio_target    = Counter(sim.get_statuses(S, -1).values())['I'] / len(S)
-            inf_ratio_bystander = Counter(sim.get_statuses(SP, -1).values())['I'] / len(SP)
+            #inf_ratio_target    = Counter(sim.get_statuses(S, -1).values())['I'] / len(S)
+            #inf_ratio_bystander = Counter(sim.get_statuses(SP, -1).values())['I'] / len(SP)
+            
+            inf_ratio_target    = np.mean([Counter(sim.get_statuses(S, i).values())['I'] / len(S) for i in range(-1, -21, -1)])
+            inf_ratio_bystander = np.mean([Counter(sim.get_statuses(SP, i).values())['I'] / len(SP) for i in range(-1, -21, -1)])
             rows.append((name, inf_ratio_target, inf_ratio_bystander, budget))
     
     return pd.DataFrame(rows, columns=['graph', 'ratio targets', 'ratio bystanders', 'budget'])

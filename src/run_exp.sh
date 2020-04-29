@@ -21,7 +21,9 @@ numExp=$2
 
 #graph_type=BA
 #numExp=30
-python sis_simulations.py --graph_type=$graph_type  --numExp=$numExp
+python sis_simulations.py --graph_type=$graph_type  --numExp=$numExp --gamma=0.24 --tau=0.2
+python sis_simulations.py --graph_type=$graph_type  --numExp=$numExp --gamma=0.5 --tau=0.1
+python sis_simulations.py --graph_type=$graph_type  --numExp=$numExp --gamma=0.3 --tau=0.5
 
 
 #graph_type=Small-World
