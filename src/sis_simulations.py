@@ -27,12 +27,12 @@ parser.add_argument('--location', type=str, default='random',
 args = parser.parse_args()
 
 
-GAMMA = 0.3                      # recovery rate
-TAU = 0.5                        # transmission rate
+GAMMA = 0.24                       # recovery rate
+TAU = 0.06                         # transmission rate
 TMAX = 30
 numCPU = 7
 LOC = args.location
-numSim = 1000
+numSim = 3000
 MODE = 'min_eigcent_SP'
 
 
@@ -90,11 +90,12 @@ def dispatch(params):
     Key = params
     print("Current exp: {}".format(Key))
 
-    with open('../result/unweighted/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
+    with open('../result/unweighted/{}/{}_numExp_{}_attacked_graphs_{}_robustness.p'.format(MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
         graph_ret = pickle.load(fid)
 
     result = []
-    for budget in [0.1, 0.2, 0.3, 0.4, 0.5]:
+    #for budget in [0.1, 0.2, 0.3, 0.4, 0.5]:
+    for budget in [0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
         graph_param = graph_ret[budget]
         for item in graph_param:
             original, attacked = item['original'], item['attacked']
@@ -109,13 +110,14 @@ def dispatch(params):
 
 pool = Pool(processes=numCPU)
 params = []
-expName = ['alpha3=0', 'equalAlpha', 'alpha1=1', 'alpha2=0', 'alpha3=1']
+#expName = ['alpha3=0', 'equalAlpha', 'alpha1=1', 'alpha2=0', 'alpha3=1']
+expName = ['alpha3=0', 'equalAlpha', 'alpha1=1']
 for Key in expName:
     params.append(Key)
 
 ret = pool.map(dispatch, params)
 
-folder = '../result/unweighted/{}/{}-SIS/Gamma-{:.2f}---Tau-{:.2f}/'.format(MODE, args.graph_type, GAMMA, TAU)
+folder = '../result/unweighted/{}/{}-SIS/Gamma-{:.2f}---Tau-{:.2f}-robustness/'.format(MODE, args.graph_type, GAMMA, TAU)
 if not os.path.exists(folder):
     os.mkdir(folder)
 
