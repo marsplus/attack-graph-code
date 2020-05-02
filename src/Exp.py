@@ -290,7 +290,7 @@ for i in range(args.numExp):
     S = torch.LongTensor(S)
     S_prime = torch.LongTensor(S_prime)
 
-    for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
+    for budget_change_ratio in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
     #for budget_change_ratio in [0.5]:
         opt_sol = launch_attach()
         result[budget_change_ratio].append(opt_sol)
@@ -309,11 +309,11 @@ for i in range(args.numExp):
 if args.save_result:
     # save attacked graphs to disk
     Key = args.mode
-    with open('../result/weighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+    with open('../result/weighted/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}_robustness.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
         pickle.dump(graph_ret, fid)
 
 
-    with open('../result/weighted/min_eigcent_SP/{}_numExp_{}_ret_{}.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
+    with open('../result/weighted/min_eigcent_SP/{}_numExp_{}_ret_{}_robustness.p'.format(args.graph_type, args.numExp, Key), 'wb') as fid:
         pickle.dump(result, fid)
 
 
