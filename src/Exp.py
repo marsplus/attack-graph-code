@@ -67,7 +67,8 @@ def select_comm(graph, mapping=None):
         
         deg = list(dict(graph.degree()).items())
         deg = sorted(deg, key=lambda x: x[1]) 
-        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.9)][0]))
+        select_node = deg[math.floor(len(deg) * 0.9)][0]
+        comm = list(graph.neighbors(select_node)) + [select_node]
     return comm
 
 
@@ -395,7 +396,7 @@ for i in range(args.numExp):
     S = torch.LongTensor(S)
     S_prime = torch.LongTensor(S_prime)
 
-    for budget_change_ratio in [0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
+    for budget_change_ratio in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
     #for budget_change_ratio in [0.5]:
         opt_sol = launch_attack()
         result[budget_change_ratio].append(opt_sol)
