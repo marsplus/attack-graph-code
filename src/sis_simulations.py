@@ -28,6 +28,8 @@ parser.add_argument('--gamma', type=float, default='0.24',
                 help='gamma')
 parser.add_argument('--tau', type=float, default='0.2',
                 help='tau')
+parser.add_argument('--weighted', type=int, default=1,
+                    help='whether the graph is weighted')
 args = parser.parse_args()
 
 
@@ -36,7 +38,7 @@ TAU = args.tau                           # transmission rate
 TMAX = 50
 numCPU = 7
 LOC = args.location
-numSim = 3000
+numSim = 2000
 MODE = 'min_eigcent_SP'
 
 
@@ -56,22 +58,6 @@ def run_sis(original, attacked, budget, num_sim=numSim):
             S = [i for i in range(numNode) if G.nodes[i]['target']]
             SP = list(set(range(numNode)) - set(S))
 
-            ### initially infected nodes appear in S or S_prime
-            ### with equal probability
-            #if LOC == 'random':
-            #    flag = np.random.rand() > 0.5
-            #elif LOC == 'S':
-            #    flag = True
-            #elif LOC == 'SP':
-            #    flag = False
-            #else:
-            #    raise ValueError("Unknown location type\n")
-
-            #if flag:
-            #    seed = np.random.choice(S, size=1)
-            #else:
-            #    seed = np.random.choice(SP, size=1)
-
             if name == 'attacked':
                 sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
             else:
@@ -79,17 +65,8 @@ def run_sis(original, attacked, budget, num_sim=numSim):
                     sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
                 else:
                     sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
-
-            #### corresponds to (SIS-*-new)
-            #numSteps = len(sim.t())
-            #inf_ratio_target    = np.sum(sim.summary(S)[1]['I'])  / (len(S) * numSteps)
-            #inf_ratio_bystander = np.sum(sim.summary(SP)[1]['I']) / (len(SP) * numSteps)
-
             
-            ## compute the ratio of infected nodes at the end of the epidemic (corresponds to SIS-*)
-            #inf_ratio_target    = Counter(sim.get_statuses(S, -1).values())['I'] / len(S)
-            #inf_ratio_bystander = Counter(sim.get_statuses(SP, -1).values())['I'] / len(SP)
-            
+            ## average results over the last 20 steps
             inf_ratio_target    = np.mean([Counter(sim.get_statuses(S, i).values())['I'] / len(S) for i in range(-1, -21, -1)])
             inf_ratio_bystander = np.mean([Counter(sim.get_statuses(SP, i).values())['I'] / len(SP) for i in range(-1, -21, -1)])
             rows.append((name, inf_ratio_target, inf_ratio_bystander, budget))
@@ -100,13 +77,14 @@ def run_sis(original, attacked, budget, num_sim=numSim):
 
 def dispatch(params):
     Key = params
+    W = 'weighted' if args.weighted else 'unweighted'
     print("Current exp: {}".format(Key))
 
-    with open('../result/weighted/{}/{}_numExp_{}_attacked_graphs_{}_robustness.p'.format(MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
+    with open('../result/{}/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(W, MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
         graph_ret = pickle.load(fid)
 
     result = []
-    for budget in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
+    for budget in [0.1, 0.2, 0.3, 0.4, 0.5]:
         graph_param = graph_ret[budget]
         for item in graph_param:
             original, attacked = item['original'], item['attacked']
@@ -127,7 +105,8 @@ for Key in expName:
 
 ret = pool.map(dispatch, params)
 
-folder = '../result/weighted/{}/{}-SIS/Gamma-{:.2f}---Tau-{:.2f}-robustness/'.format(MODE, args.graph_type, GAMMA, TAU)
+W = 'weighted' if args.weighted else 'unweighted'
+folder = '../result/{}/{}/{}-SIS/Gamma-{:.2f}---Tau-{:.2f}/'.format(W, MODE, args.graph_type, GAMMA, TAU)
 if not os.path.exists(folder):
     os.mkdir(folder)
 

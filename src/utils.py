@@ -1,20 +1,5 @@
 import torch
 
-
-## transform th adjacency matrix to 
-## the contact matrix
-def contact_matrix(mat, B):
-    return mat / B
-
-
-# project a vector to a L_inf ball
-# with radius r
-def L_inf_proj(v, r):
-    vec = v.clone()
-    vec[vec < -r] = -r
-    vec[vec > r] = r
-    return vec
-
 # an iterative method based on Rayleigh 
 # quotient to estimate the largest eigenvalue
 # and the associated eigenvector
@@ -58,6 +43,27 @@ def estimate_sym_specNorm(mat, Iter=50):
     return spec_norm
 
 
+def get_submatrix(mat, row_idx, col_idx):
+    return torch.index_select(torch.index_select(mat, 0, row_idx), 1, col_idx)
+
+
+##################################################################
+
+## transform th adjacency matrix to 
+## the contact matrix
+def contact_matrix(mat, B):
+    return mat / B
+
+
+# project a vector to a L_inf ball
+# with radius r
+def L_inf_proj(v, r):
+    vec = v.clone()
+    vec[vec < -r] = -r
+    vec[vec > r] = r
+    return vec
+
+
 def matrix_proj_spectralNorm(mat, epsilon):
     U, Sigma, V = torch.svd(mat)
     Sigma_proj = L_inf_proj(Sigma, epsilon)
@@ -77,7 +83,5 @@ def matrix_vectorize_proj_frobinusNorm(mat, epsilon):
     return mat_proj.view(dim)
 
 
-def get_submatrix(mat, row_idx, col_idx):
-    return torch.index_select(torch.index_select(mat, 0, row_idx), 1, col_idx)
 
     
