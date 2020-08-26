@@ -49,22 +49,12 @@ def melt_gel(graph, target, budget_edges=None, budget_eig=None):
     pass
 
 
-def degree_centrality(graph, e):
-    """Return the sum of the degrees at the endpoints."""
-    return graph.degree(e[0]) + graph.degree(e[1])
-
-
-cent_func = {'deg': degree_centrality}
-
-
 def max_cent_edge(graph, cent='deg'):
-    """Return the edge with the highest centrality."""
-    cur_cent = float('-inf')
-    cur_edge = None
-    for e in graph.edges():
-        if cent_func[cent](graph, e) > cur_cent:
-            cur_edge = e
-    return cur_edge
+    if cent == 'deg':
+        cent_dict = {e: graph.degree(e[0]) + graph.degree(e[1]) for e in graph.edges()}
+    elif cent == 'bet':
+        cent_dict = nx.edge_betweenness_centrality(graph)
+    return max(cent_dict, key=cent_dict.get) if cent_dict else None
 
 
 def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='deg'):
@@ -181,8 +171,9 @@ def main():
 
     attacked = centrality_attack(graph, target, budget_eig=budget, cent='deg')
 
-    # don't forget to add more centrality measures
-    # melt_gel(graph, target, budget_eig=budget)
+    # TO DO:
+    # 1. make sure it all works for weighted graphs
+    # 2. melt_gel(graph, target, budget_eig=budget)
 
     # then ask Sixie for his datasets to run experiments or give the code to
     # Sixie to run the experiments
