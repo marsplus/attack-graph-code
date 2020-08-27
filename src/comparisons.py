@@ -11,6 +11,73 @@ import networkx as nx
 import scipy.sparse as sparse
 
 
+def left_right(matrix):
+    """Return the principal left and right eigenvectors of the matrix."""
+    right = sparse.linalg.eigs(matrix, k=1, return_eigenvectors=True)[1]
+    right = right.reshape((-1,)).real
+    left = sparse.linalg.eigs(matrix.T, k=1, return_eigenvectors=True)[1]
+    left = left.reshape((-1,)).real
+    return left, right
+
+
+def gel(graph, k):
+    """See Algorithm 2 in [1].
+
+    Parameters
+    ----------
+
+    graph (nx.Graph): the graph to gel
+
+    k (int): the number of edges to add to the graph
+
+    References
+    ----------
+    [1] Hanghang Tong, B. Aditya Prakash, Tina Eliassi-Rad, Michalis Faloutsos,
+    Christos Faloutsos: Gelling, and melting, large graphs by edge
+    manipulation. CIKM 2012: 245-254
+
+    """
+    # The numbered comments correspond exactly to the number lines of Algorithm
+    # 2 in Reference [1].  They have been only slightly modified
+
+    # 1: compute the left (u) and right (v) eigenvectors of A that correspond
+    # to the leading eigenvalue (u, v ≥ 0)
+    A = nx.adjacency_matrix(graph).astype('f')
+    u, v = left_right(A)
+    if u.max() < 0:
+        u *= -1
+    if v.max() < 0:
+        v *= -1
+
+    # 2: calculate the maximum in-degree (d_in) and out-degree (d_out) of A
+    d_in, d_out = int(A.sum(axis=0).max()), int(A.sum(axis=1).max())
+
+    # 3: find the subset of k + d_in nodes with the highest left eigenscores
+    # u_i. Index them by I
+    num_edges = min(k + d_in, graph.size()) # do not take more edges than exist
+    I = np.argsort(u)[-num_edges:]
+
+    # 4: find the subset of k + d_out nodes with the highest right eigenscores
+    # v_j. Index them by J
+    num_edges = min(k + d_out, graph.size()) # do not take more edges than exist
+    J = np.argsort(u)[-num_edges:]
+
+    # 5. index by P the set of all edges e=(i,j), i∈I, j∈J with A(i,j)=0
+    P = [(i, j) for i in I for j in J
+         if abs(A[i, j]) < 1e-5 # add only if they are not already neighbors
+         and i != j             # don't add self-loops
+    ]
+
+    # 6: for each in P, define score(e) := u(i) * v(j)
+    score = {}
+    for i, j in P:
+        if (i, j) not in score and (j, i) not in score:
+            score[(i, j)] = u[i] * v[j]
+
+    # 8: return top-k non-existing edges with the highest scores among P.
+    return sorted(score, key=score.get)[-k:]
+
+
 def melt_gel(graph, target, budget_edges=None, budget_eig=None):
     """Use NetMelt and NetGel to attack the graph spectrum.
 
@@ -44,9 +111,36 @@ def melt_gel(graph, target, budget_edges=None, budget_eig=None):
     manipulation. CIKM 2012: 245-254
 
     """
-    # BTW, the NetMelt code in Matlab among with some competitors is at
-    # http://tonghanghang.org/events/netrin/netrin_edge.tgz
-    pass
+    if budget_edges and budget_eig:
+        raise ValueError('budget_edges and budget_eig cannot both be non null')
+    if budget_edges is None and budget_eig is None:
+        raise ValueError('budget_edges and budget_eig cannot both be None')
+
+    attacked = graph.copy()
+    target = attacked.subgraph([n for n in target])
+    outside_target = attacked.subgraph([n for n in attacked if n not in target])
+
+    fraction = target.size() / graph.size()
+    if budget_edges:
+        target_budget = int(fraction * budget_edges)
+        outside_budget = budget_edges - target_budget
+        kwargs_target = {'budget_edges': target_budget,
+                         'budget_eig': None}
+        kwargs_outside = {'budget_edges': outside_budget,
+                          'budget_eig': None}
+    else:
+        target_budget = fraction * budget_edges
+        outside_budget = budget_edges - target_budget
+        kwargs_target = {'budget_edges': None,
+                         'budget_eig': target_budget}
+        kwargs_outside = {'budget_edges': None,
+                          'budget_eig': outside_budget}
+
+    to_add = gel(target, **kwargs_target)
+    to_rem = melt(outside_target, **kwargs_outside)
+    attacked.add_edges_from(to_add)
+    attacked.remove_edges_from(to_rem)
+    return attacked
 
 
 def max_cent_edge(graph, cent='deg'):
@@ -169,11 +263,11 @@ def main():
     target = graph.subgraph(graph.neighbors(random_node))
     budget = 2
 
-    attacked = centrality_attack(graph, target, budget_eig=budget, cent='deg')
+    # attacked = centrality_attack(graph, target, budget_eig=budget, cent='deg')
+    attacked = melt_gel(graph, target, budget_eig=budget)
 
     # TO DO:
     # 1. make sure it all works for weighted graphs
-    # 2. melt_gel(graph, target, budget_eig=budget)
 
     # then ask Sixie for his datasets to run experiments or give the code to
     # Sixie to run the experiments
