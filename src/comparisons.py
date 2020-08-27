@@ -20,6 +20,55 @@ def left_right(matrix):
     return left, right
 
 
+def melt(graph, k):
+    """See Algorithm 1 in [1].
+
+    Parameters
+    ----------
+
+    graph (nx.Graph): the graph to gel
+
+    k (int): the number of edges to remove from the graph
+
+    References
+    ----------
+    [1] Hanghang Tong, B. Aditya Prakash, Tina Eliassi-Rad, Michalis Faloutsos,
+    Christos Faloutsos: Gelling, and melting, large graphs by edge
+    manipulation. CIKM 2012: 245-254
+
+    """
+    # The numbered comments correspond exactly to the number lines of Algorithm
+    # 2 in Reference [1].  They have been only slightly modified for clarity
+    A = nx.adjacency_matrix(graph).astype('f')
+
+    # 1: compute the leading eigenvalue λ of A; let u and v be the
+    # corresponding left and right eigenvectors, respectively
+    u, v = left_right(A)
+
+    # 2: if mini=1,...,nu(i) < 0 then
+    # 3: assign u ← −u
+    # 4: end if
+    if u.min() < 0:
+        u *= -1
+
+    # 5: if mini=1,...,nv(i) < 0 then
+    # 6: assign v ← −v
+    # 7: end if
+    if v.min() < 0:
+        v *= -1
+
+    # 8: for each edge e=(i, j) with A[i, j]=1 do
+    # 9: score(e) = u[i] * v[j]
+    # 10: end for
+    score = {}
+    for i, j in zip(*A.nonzero()):
+        if (i, j) not in score and (j, i) not in score:
+            score[(i, j)] = u[i] * v[j]
+
+    # 11: return top-k edges with the highest score(ex)
+    return sorted(score, key=score.get)[-k:]
+
+
 def gel(graph, k):
     """See Algorithm 2 in [1].
 
@@ -38,7 +87,7 @@ def gel(graph, k):
 
     """
     # The numbered comments correspond exactly to the number lines of Algorithm
-    # 2 in Reference [1].  They have been only slightly modified
+    # 2 in Reference [1].  They have been only slightly modified for clarity
 
     # 1: compute the left (u) and right (v) eigenvectors of A that correspond
     # to the leading eigenvalue (u, v ≥ 0)
@@ -268,6 +317,7 @@ def main():
 
     # TO DO:
     # 1. make sure it all works for weighted graphs
+    # 2. make melt_gel work with budget_eig
 
     # then ask Sixie for his datasets to run experiments or give the code to
     # Sixie to run the experiments
