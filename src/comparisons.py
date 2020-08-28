@@ -6,6 +6,7 @@ Run experiments against baselines and competitor algorithms.
 
 """
 
+import random
 import numpy as np
 import networkx as nx
 import scipy.sparse as sparse
@@ -26,7 +27,7 @@ def melt(graph, k):
     Parameters
     ----------
 
-    graph (nx.Graph): the graph to gel
+    graph (nx.Graph): the graph to melt
 
     k (int): the number of edges to remove from the graph
 
@@ -160,33 +161,44 @@ def melt_gel(graph, target, budget_edges=None, budget_eig=None):
     manipulation. CIKM 2012: 245-254
 
     """
+    ###
+    ### Setup
+    ###
+
+    # Check that we only have one type of budget
     if budget_edges and budget_eig:
         raise ValueError('budget_edges and budget_eig cannot both be non null')
     if budget_edges is None and budget_eig is None:
         raise ValueError('budget_edges and budget_eig cannot both be None')
 
+    # If the budget is given in eigenvalue units, we must modify one edge at a
+    # time, for which we use the specialized function centrality_attack
+    if budget_eig:
+        return centrality_attack(graph, target, budget_edges=None,
+                                 budget_eig=budget_eig, cent='gel')
+
+    # Compute the necessary graphs.  Make sure they are SubGraphViews of
+    # attacked, not of the original graph.
     attacked = graph.copy()
-    target = attacked.subgraph([n for n in target])
-    outside_target = attacked.subgraph([n for n in attacked if n not in target])
+    target = attacked.subgraph(list(target.nodes()))
+    outside_target = attacked.subgraph([n for n in attacked
+                                        if n not in target])
 
+    # We split the budget proportionally to the size of the target and original
+    # graphs.  For example, if the target has 5% of the edges of the original
+    # graph, then 5% of the budget will be used to add edges to the target
+    # subgraph, and 95% will be used to remove edges from outside of the target
+    # subgraph.  Remember, at this point we are only using budget_edges.
     fraction = target.size() / graph.size()
-    if budget_edges:
-        target_budget = int(fraction * budget_edges)
-        outside_budget = budget_edges - target_budget
-        kwargs_target = {'budget_edges': target_budget,
-                         'budget_eig': None}
-        kwargs_outside = {'budget_edges': outside_budget,
-                          'budget_eig': None}
-    else:
-        target_budget = fraction * budget_edges
-        outside_budget = budget_edges - target_budget
-        kwargs_target = {'budget_edges': None,
-                         'budget_eig': target_budget}
-        kwargs_outside = {'budget_edges': None,
-                          'budget_eig': outside_budget}
+    target_budget = int(fraction * budget_edges)
+    outside_budget = budget_edges - target_budget
 
-    to_add = gel(target, **kwargs_target)
-    to_rem = melt(outside_target, **kwargs_outside)
+    ###
+    ### Main function
+    ###
+
+    to_add = gel(target, target_budget)
+    to_rem = melt(outside_target, outside_budget)
     attacked.add_edges_from(to_add)
     attacked.remove_edges_from(to_rem)
     return attacked
@@ -218,7 +230,8 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
     budget_eig (float): the desired amount to change the graph spectrum
 
     cent (str): the edge centrality to use.  Possible values are 'deg', which
-    uses the sum of the degrees at the endpoints of the edge;
+    uses the sum of the degrees at the endpoints of the edge; 'bet', which uses
+    edge betweenness centrality; and 'gel', which uses the NetGel algorithm.
 
     Notes
     -----
@@ -232,32 +245,62 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
     A nx.Graph object that represents the graph after the attack
 
     """
+    ###
+    ### Setup
+    ###
+
+    # Do not use this function with cent='gel' and budget_edges not None
+    assert not (cent == 'gel' and budget_edges), 'Use gel_melt() instead'
+
+    # Check that we only have one type of budget
     if budget_edges and budget_eig:
         raise ValueError('budget_edges and budget_eig cannot both be non null')
     if budget_edges is None and budget_eig is None:
         raise ValueError('budget_edges and budget_eig cannot both be None')
 
+    # Compute the necessary graphs.  Make sure they are SubGraphViews of
+    # attacked, not of the original graph.
     adj = nx.adjacency_matrix(graph)
     attacked = graph.copy()
-    target = attacked.subgraph([n for n in target])
-    outside_target = attacked.subgraph([n for n in attacked if n not in target])
+    target = attacked.subgraph(list(target.nodes()))
+    outside_target = attacked.subgraph([n for n in attacked
+                                        if n not in target])
 
+    # Thep kee_going function makes sure we compare to the correct budget
     spent_budget = 0
     if budget_edges:
         keep_going = lambda sb: sb <= budget_edges
     if budget_eig:
         keep_going = lambda sb: sb <= budget_eig
 
+    # Toggle between adding ('add') and removing ('rem') edges
     mode = 'add'
-    failure_prev = False
-    while True:
-        # choose which edge to add/remove
-        if mode == 'add':
-            edge = max_cent_edge(nx.complement(target), cent=cent)
-        else:
-            edge = max_cent_edge(outside_target, cent=cent)
 
-        # if we fail twice in a row, stop
+    # get_edge_to_add must return a non-existing edge outside of the target
+    # subgraph that will be added.  get_edge_to_rem must return an existing
+    # edge inside of the target subgraph that will be removed.  In most cases,
+    # we will just use these two...
+    get_edge_to_add = lambda: max_cent_edge(nx.complement(target), cent=cent)
+    get_edge_to_rem = lambda: max_cent_edge(outside_target, cent=cent)
+    # ... but when the budget is given in eigenvalue units and we are using
+    # gel/melt, we use the specific functions
+    if budget_eig and cent == 'gel':
+        get_edge_to_add = lambda: gel(target, 1)[0]
+        get_edge_to_rem = lambda: melt(outside_target, 1)[0]
+
+    ###
+    ### Main loop
+    ###
+
+    # If we fail to find an edge to mofidy twice in a row, we will break
+    failure_prev = False
+
+    while True:
+
+        # Choose which edge to add/remove
+        edge = get_edge_to_add() if mode == 'add' else get_edge_to_rem()
+
+        # If we fail twice in a row, stop
         if not edge:
             if failure_prev:
                 print(f'No more edges to add or remove. Stopping. Budget spent: {spent_budget:.3f}')
@@ -267,18 +310,18 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
                 failure_prev = True
                 continue
 
-        # check whether applying the changes would keep us within budget
+        # Check whether applying the changes would keep us within budget
         if budget_edges:
             spent_budget += 1
         if budget_eig:
-            # there is no implementation for 2-norms for spectral matrices
-            # so we must convert to dense...
             staged_changes = attacked.copy()
             if mode == 'add':
                 staged_changes.add_edge(*edge)
             else:
                 staged_changes.remove_edge(*edge)
             staged_adj = nx.adjacency_matrix(staged_changes)
+            # there is no implementation for 2-norms for spectral matrices
+            # so we must convert to dense...
             diff = (adj - staged_adj).A
             spent_budget = np.linalg.norm(diff, ord=2)
         if not keep_going(spent_budget):
@@ -298,7 +341,7 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
 
         print(f'\tTotal budget spent: {spent_budget:.3f}')
 
-        # swtich between adding and removing
+        # Toggle between adding and removing
         mode = 'rem' if mode == 'add' else 'add'
 
     return attacked
@@ -307,17 +350,23 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
 def main():
     """Run experiments."""
     graph = nx.barabasi_albert_graph(100, 3)
+    for _, _, data in graph.edges(data=True):
+        data['weight'] = random.randint(0, 10)
 
-    random_node = np.random.choice([n for n in graph])
-    target = graph.subgraph(graph.neighbors(random_node))
-    budget = 2
+    # make sure to use graph.subgraph to get a SubGraphView
+    random_node = np.random.choice(graph)
+    target = graph.subgraph(list(graph.neighbors(random_node)) + [random_node])
+    budget = 10
 
     # attacked = centrality_attack(graph, target, budget_eig=budget, cent='deg')
     attacked = melt_gel(graph, target, budget_eig=budget)
 
+
     # TO DO:
-    # 1. make sure it all works for weighted graphs
-    # 2. make melt_gel work with budget_eig
+    # 1. betweenness centrality of non-existing edges should not be computed in
+    # the complement graph
+    #
+    # 2. if a change would incur in too much budget, try something else
 
     # then ask Sixie for his datasets to run experiments or give the code to
     # Sixie to run the experiments
