@@ -31,6 +31,12 @@ def melt(graph, k):
 
     k (int): the number of edges to remove from the graph
 
+    Notes
+    -----
+    If k < graph.size(), then the edges will be returned in the order of their
+    gel score.  However, if k >= graph.size(), then all of the edges of the
+    graph are returned in arbitrary order.
+
     References
     ----------
     [1] Hanghang Tong, B. Aditya Prakash, Tina Eliassi-Rad, Michalis Faloutsos,
@@ -38,6 +44,15 @@ def melt(graph, k):
     manipulation. CIKM 2012: 245-254
 
     """
+    n, m = graph.order(), graph.size()
+    # Can't remove edges from the empty graph
+    if m == 0:
+        return None
+
+    # Can't remove more edges than there are in the graph
+    if k >= graph.size():
+        return list(graph.edges())
+
     # The numbered comments correspond exactly to the number lines of Algorithm
     # 2 in Reference [1].  They have been only slightly modified for clarity
     A = nx.adjacency_matrix(graph).astype('f')
@@ -66,8 +81,10 @@ def melt(graph, k):
         if (i, j) not in score and (j, i) not in score:
             score[(i, j)] = u[i] * v[j]
 
-    # 11: return top-k edges with the highest score(ex)
-    return sorted(score, key=score.get)[-k:]
+    # 11: return top-k edges with the highest score
+    edges = sorted(score, key=score.get)[-k:]
+    nodes = list(graph.nodes)
+    return [(nodes[u], nodes[v]) for u, v in edges]
 
 
 def gel(graph, k):
@@ -87,6 +104,15 @@ def gel(graph, k):
     manipulation. CIKM 2012: 245-254
 
     """
+    n, m = graph.order(), graph.size()
+    # Can't add edges to the complete graph
+    if m == n*(n-1)/2:
+        return None
+
+    # Can't add more edges than are missing
+    if k >= n*(n-1)/2 - m:
+        return [(u, v) for u in graph for v in graph if (u, v) not in graph.edges]
+
     # The numbered comments correspond exactly to the number lines of Algorithm
     # 2 in Reference [1].  They have been only slightly modified for clarity
 
@@ -125,7 +151,9 @@ def gel(graph, k):
             score[(i, j)] = u[i] * v[j]
 
     # 8: return top-k non-existing edges with the highest scores among P.
-    return sorted(score, key=score.get)[-k:]
+    edges = sorted(score, key=score.get)[-k:]
+    nodes = list(graph.nodes)
+    return [(nodes[u], nodes[v]) for u, v in edges]
 
 
 def melt_gel(graph, target, budget_edges=None, budget_eig=None):
@@ -204,7 +232,47 @@ def melt_gel(graph, target, budget_edges=None, budget_eig=None):
     return attacked
 
 
-def max_cent_edge(graph, cent='deg'):
+def max_absent_edge(graph, cent='deg'):
+    """Return the absent edge with the maximum centrality.
+
+    Parameters
+    ----------
+
+    graph (nx.Graph): the graph to analyze
+
+    cent (str): one of 'deg' or 'bet'
+
+    Notes
+    -----
+    If cent='bet', the centrality of an absent edge is defined as the sum of
+    the betweenness centrality of the two nodes at its endpoints.
+
+    """
+    absent_edges = [(u, v) for u in graph for v in graph if (u, v) not in graph.edges]
+    if cent == 'deg':
+        deg = graph.degree()
+        cent_dict = {e: deg(e[0]) + deg(e[1]) for e in absent_edges}
+    elif cent == 'bet':
+        bet = nx.betweenness_centrality(graph)
+        cent_dict = {e: bet(e[0]) + bet(e[1]) for e in absent_edges}
+    return max(cent_dict, key=cent_dict.get) if cent_dict else None
+
+
+def max_edge(graph, cent='deg'):
+    """Return the edge with the maximum centrality.
+
+    Parameters
+    ----------
+
+    graph (nx.Graph): the graph to analyze
+
+    cent (str): one of 'deg' or 'bet'
+
+    Notes
+    -----
+    If cent='bet', this uses nx.edge_betweenness_centrality
+
+    """
     if cent == 'deg':
         cent_dict = {e: graph.degree(e[0]) + graph.degree(e[1]) for e in graph.edges()}
     elif cent == 'bet':
@@ -266,7 +334,7 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
     outside_target = attacked.subgraph([n for n in attacked
                                         if n not in target])
 
-    # Thep kee_going function makes sure we compare to the correct budget
+    # The keep_going function makes sure we compare to the correct budget
     spent_budget = 0
     if budget_edges:
         keep_going = lambda sb: sb <= budget_edges
@@ -278,15 +346,21 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
 
     # get_edge_to_add must return a non-existing edge outside of the target
     # subgraph that will be added.  get_edge_to_rem must return an existing
-    # edge inside of the target subgraph that will be removed.  In most cases,
-    # we will just use these two...
-    get_edge_to_add = lambda: max_cent_edge(nx.complement(target), cent=cent)
-    get_edge_to_rem = lambda: max_cent_edge(outside_target, cent=cent)
-    # ... but when the budget is given in eigenvalue units and we are using
-    # gel/melt, we use the specific functions
-    if budget_eig and cent == 'gel':
-        get_edge_to_add = lambda: gel(target, 1)[0]
-        get_edge_to_rem = lambda: melt(outside_target, 1)[0]
+    # edge inside of the target subgraph that will be removed.  Most of the
+    # time we will choose them like this...
+    get_edge_to_add = lambda: max_absent_edge(target, cent=cent)
+    get_edge_to_rem = lambda: max_edge(outside_target, cent=cent)
+    # ... except when the centality is 'gel'
+    if cent == 'gel':
+        if budget_eig:
+            # These return the first returned edge or an empty list
+            get_edge_to_add = lambda: (gel(target, 1) or [[]])[0]
+            get_edge_to_rem = lambda: (melt(outside_target, 1) or [[]])[0]
+        else:
+            print('If you want to use NetGel with a budget given '
+                  'by a number of edges, use melt_gel() instead.')
+            return
+
 
     ###
     ### Main loop
@@ -349,28 +423,20 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
 
 def main():
     """Run experiments."""
-    graph = nx.barabasi_albert_graph(100, 3)
+    graph = nx.barabasi_albert_graph(500, 3)
     for _, _, data in graph.edges(data=True):
         data['weight'] = random.randint(0, 10)
 
     # make sure to use graph.subgraph to get a SubGraphView
-    random_node = np.random.choice(graph)
-    target = graph.subgraph(list(graph.neighbors(random_node)) + [random_node])
-    budget = 10
+    random_nodes = np.random.choice(graph, size=10)
+    target = graph.subgraph(
+        [neigh for rn in random_nodes for neigh in graph.neighbors(rn)]
+        + [rn for rn in random_nodes]
+    )
+    budget = 20
 
-    # attacked = centrality_attack(graph, target, budget_eig=budget, cent='deg')
+    attacked = centrality_attack(graph, target, budget_eig=budget, cent='deg')
     attacked = melt_gel(graph, target, budget_eig=budget)
-
-
-    # TO DO:
-    # 1. betweenness centrality of non-existing edges should not be computed in
-    # the complement graph
-    #
-    # 2. if a change would incur in too much budget, try something else
-
-    # then ask Sixie for his datasets to run experiments or give the code to
-    # Sixie to run the experiments
-    # Datasets are at http://tonghanghang.org/events/netrin/netrin_data.tgz
 
 
 
