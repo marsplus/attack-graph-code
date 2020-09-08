@@ -5,69 +5,127 @@ sir_simulations.py
 Simulate SIR dynamics on graph and attacked graph.
 
 """
-
+import os
 import EoN
+import pickle
+import argparse
 import numpy as np
 import pandas as pd
 import networkx as nx
+from collections import Counter
+from multiprocessing import Pool
 
-GAMMA = 1.0                     # recovery rate
-TAU = 5                         # transmission rate
+parser = argparse.ArgumentParser()
+parser.add_argument('--graph_type', type=str, default='BA',
+                help='graph type')
+parser.add_argument('--numExp', type=int, default=1,
+                help='numExp')
+parser.add_argument('--budget', type=float, default=1,
+                help='attacker budget')
+parser.add_argument('--location', type=str, default='random',
+                help='locatioin of initial seed')
+args = parser.parse_args()
+
+
+GAMMA = 0.24                       # recovery rate
+TAU = 0.06                         # transmission rate
+TMAX = 30
+numCPU = 7
+LOC = args.location
+numSim = 10000
+MODE = 'min_eigcent_SP'
 
 
 
-def random_bool(size):
-    """Return random boolean values."""
-    return np.random.randint(2, size=size).astype(bool)
-
-
-def run_sir(original, attacked, num_sim=100):
+def run_sis(original, attacked, budget, num_sim=numSim):
     """Sun SIR simulations on both graphs."""
     graphs = {'original': original, 'attacked': attacked}
     rows = []
     for name in graphs:
+        G = graphs[name]
+        numNode = G.order()
         print('Simulating SIR on {}'.format(name))
-        for _ in range(num_sim):
-            sim = EoN.fast_SIR(graphs[name], TAU, GAMMA, return_full_data=True)
-            targets = sum(1 for n in graphs[name]
-                          if graphs[name].nodes[n]['target'] and
-                          sim.node_status(n, -1) == 'R')
-            bystanders = sum(1 for n in graphs[name]
-                             if not graphs[name].nodes[n]['target'] and
-                             sim.node_status(n, -1) == 'R')
-            rows.append((name, len(sim.I()), emptymax(sim.I()),
-                         emptymax(sim.R()), targets, bystanders))
-    return pd.DataFrame(rows, columns=['graph', 't_max', 'i_max', 'r_max',
-                                       'infected_targets', 'infected_bystanders'])
+        for ns in range(num_sim):
+            if ns % 50 == 0: print("numSim: {}".format(ns))
+            #print("numSim: {}".format(ns))
+            
+            S = [i for i in range(numNode) if G.nodes[i]['target']]
+            SP = list(set(range(numNode)) - set(S))
+
+            ### initially infected nodes appear in S or S_prime
+            ### with equal probability
+            #if LOC == 'random':
+            #    flag = np.random.rand() > 0.5
+            #elif LOC == 'S':
+            #    flag = True
+            #elif LOC == 'SP':
+            #    flag = False
+            #else:
+            #    raise ValueError("Unknown location type\n")
+
+            #if flag:
+            #    seed = np.random.choice(S, size=1)
+            #else:
+            #    seed = np.random.choice(SP, size=1)
+
+            sim = EoN.fast_SIR(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
+           
+
+            #### corresponds to (SIS-*-new)
+            #numSteps = len(sim.t())
+            #inf_ratio_target    = np.sum(sim.summary(S)[1]['I'])  / (len(S) * numSteps)
+            #inf_ratio_bystander = np.sum(sim.summary(SP)[1]['I']) / (len(SP) * numSteps)
+
+            
+            ## compute the ratio of infected nodes at the end of the epidemic (corresponds to SIS-*)
+            inf_ratio_target    = Counter(sim.get_statuses(S, -1).values())['I'] / len(S)
+            inf_ratio_bystander = Counter(sim.get_statuses(SP, -1).values())['I'] / len(SP)
+            
+            rows.append((name, inf_ratio_target, inf_ratio_bystander, budget))
+    return pd.DataFrame(rows, columns=['graph', 'ratio targets', 'ratio bystanders', 'budget'])
 
 
-def emptymax(arr):
-    return arr.max() if arr.shape[0] else 0
 
+def dispatch(params):
+    Key = params
+    print("Current exp: {}".format(Key))
 
-def main():
-    """Simulate dynamics on both graphs."""
-    # For this example, I will use the Karate Club graph, choose a target
-    # subgraph at random, and use a dummy version of the attacked graph
-    original = nx.karate_club_graph()
-    targets = random_bool(original.order())
-    targets = {n: targets[idx] for idx, n in enumerate(original)}
-    print('There are {} targets'.format(len([n for n in targets if targets[n]])))
-    nx.set_node_attributes(original, targets, 'target')
+    with open('../result/unweighted/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
+        graph_ret = pickle.load(fid)
 
-    # In actuality, the attacked graph should be the output of our attack
-    # algorithms
-    attacked = original.copy()
-    attacked.remove_nodes_from([33, 2])
-
-    # Run simulations
-    results = run_sir(original, attacked)
-
-    # Display some results
-    cols = ['infected_targets', 'infected_bystanders']
-    print(results.pivot_table(index='graph')[cols])
+    result = []
+    #for budget in [0.1, 0.2, 0.3, 0.4, 0.5]:
+    for budget in [0.1, 0.2, 0.3, 0.4, 0.5]:
+        graph_param = graph_ret[budget]
+        for item in graph_param:
+            original, attacked = item['original'], item['attacked']
+            ret = run_sis(original, attacked, budget)
+            result.append(ret)
+    result = pd.concat(result)
+    return result
 
 
 
-if __name__ == '__main__':
-    main()
+"""Simulate dynamics on both graphs."""
+
+pool = Pool(processes=numCPU)
+params = []
+expName = ['alpha3=0', 'equalAlpha', 'alpha1=1', 'alpha2=0', 'alpha3=1']
+#expName = ['equalAlpha']
+for Key in expName:
+    params.append(Key)
+
+ret = pool.map(dispatch, params)
+
+folder = '../result/unweighted/{}/{}-SIR/Gamma-{:.2f}---Tau-{:.2f}/'.format(MODE, args.graph_type, GAMMA, TAU)
+if not os.path.exists(folder):
+    os.mkdir(folder)
+
+for idx, Key in enumerate(expName):
+    result = ret[idx]
+    fileName = '{}_numExp_{}_SIR_{}.p'.format(args.graph_type, args.numExp, Key) 
+    with open(os.path.join(folder, fileName), 'wb') as fid:
+        pickle.dump(result, fid)
+
+pool.close()
+pool.join()

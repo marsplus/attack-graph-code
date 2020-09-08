@@ -21,7 +21,7 @@ numExp=$2
 
 #graph_type=BTER
 #numExp=30
-python sis_simulations.py --graph_type=$graph_type  --numExp=$numExp
+python sir_simulations.py --graph_type=$graph_type  --numExp=$numExp
 
 #graph_type=Small-World
 #numExp=30
