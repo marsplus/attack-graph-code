@@ -10,3 +10,4 @@ src/flycheck*
 result/*
 data/*.raw
 .DS_Store
+requirements.txt
