@@ -102,7 +102,7 @@ def gen_graph(graph_type, graph_id=1):
 
 
 
-def SGD_attack(Attacker, Optimizer, Iter=100):
+def SGD_attack(Attacker, Optimizer):
     Attacker_budget = Attacker.get_budget()
     cnt = 0
     while True:
@@ -154,7 +154,8 @@ def launch_attach():
     Alpha = [alpha_1, alpha_2, alpha_3]
     print("alpha_1: {:.4f}      alpha_2: {:.4f}     alpha_3: {:.4f}\n".format(alpha_1, alpha_2, alpha_3))
 
-    Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G)
+    
+    Attacker = Threat_Model(S, S_prime, Alpha, budget_change_ratio, learning_rate, G, args.weighted)
     Optimizer = torch.optim.SGD(Attacker.parameters(), lr=learning_rate)
 
     t1 = time.time()
@@ -268,7 +269,7 @@ for i in range(args.numExp):
     S = torch.LongTensor(S)
     S_prime = torch.LongTensor(S_prime)
 
-    for budget_change_ratio in [0.5]:
+    for budget_change_ratio in [0.1]:
         opt_sol = launch_attach()
         result[budget_change_ratio].append(opt_sol)
 

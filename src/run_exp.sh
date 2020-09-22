@@ -14,7 +14,7 @@
 graph_type=$1
 numExp=$2
 #python Exp.py --graph_type=$graph_type --mode=equalAlpha --numExp=$numExp --weighted=0
-python Exp.py --graph_type=$graph_type --mode=alpha1=1   --numExp=$numExp
+python Exp.py --graph_type=$graph_type --mode=alpha1=1   --numExp=$numExp --save_result=0
 #python Exp.py --graph_type=$graph_type --mode=alpha3=0   --numExp=$numExp
 #python Exp.py --graph_type=$graph_type --mode=alpha2=0   --numExp=$numExp
 #python Exp.py --graph_type=$graph_type --mode=alpha3=1   --numExp=$numExp
