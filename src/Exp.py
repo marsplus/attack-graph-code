@@ -103,6 +103,7 @@ def gen_graph(graph_type, graph_id=1):
 
 
 def SGD_attack(Attacker, Optimizer):
+    t1 = time.time()
     Attacker_budget = Attacker.get_budget()
     cnt = 0
     while True:
@@ -120,7 +121,8 @@ def SGD_attack(Attacker, Optimizer):
             cnt += 1
         else:
             break
-    print("SGD iterations: {}".format(cnt))
+    t_sgd = time.time() - t1
+    print("SGD iterations: {}    Time: {:.4f}".format(cnt, t_sgd))
    
     if args.weighted:
         Attacker.adj_tensor.data[Attacker.adj_tensor.data < 0] = 0
@@ -269,7 +271,7 @@ for i in range(args.numExp):
     S = torch.LongTensor(S)
     S_prime = torch.LongTensor(S_prime)
 
-    for budget_change_ratio in [0.1]:
+    for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
         opt_sol = launch_attach()
         result[budget_change_ratio].append(opt_sol)
 
