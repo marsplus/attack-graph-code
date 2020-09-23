@@ -11,3 +11,4 @@ result/*
 data/*.raw
 .DS_Store
 requirements.txt
+src/feastpack_v1.2
