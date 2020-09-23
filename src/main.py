@@ -94,7 +94,7 @@ def gen_graph(graph_type, graph_id=1):
         Adj = nx.adjacency_matrix(G)
         Adj += Adj.T
         Adj /= Adj.max()
-        G = nx.from_numpy_matrix(Adj)
+        G = nx.from_numpy_matrix(Adj.todense())
         comps = nx.connected_components(G)
         comp_max_idx = max(comps, key=lambda x: len(x))
         G = G.subgraph(comp_max_idx)
