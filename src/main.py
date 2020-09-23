@@ -7,9 +7,6 @@ import numpy as np
 from utils import *
 import pandas as pd
 import networkx as nx
-from scipy import stats
-from scipy import sparse
-import numpy.linalg as LIN
 from model import Threat_Model
 from collections import defaultdict
 from networkx.algorithms.community import greedy_modularity_communities
@@ -63,7 +60,8 @@ def select_comm(graph, mapping=None):
     elif args.graph_type == 'Airport':
         deg = list(dict(graph.degree()).items())
         deg = sorted(deg, key=lambda x: x[1])
-        comm = list(graph.neighbors(deg[math.floor(len(deg) * 0.9)][0])) 
+        selected_node = deg[math.floor(len(deg) * 0.9)][0] 
+        comm = list(graph.neighbors(selected_node)) + [selected_node] 
     elif args.graph_type == 'Brain':
         comm = list(range(len(graph)-100, len(graph)))
     else:
@@ -89,15 +87,16 @@ def gen_graph(graph_type, graph_id=1):
         G = nx.read_edgelist('../data/BTER_{:02d}.txt'.format(graph_id), nodetype=int)
     elif graph_type == 'Airport':
         G = nx.read_edgelist('../data/US-airport.txt', nodetype=int, create_using=nx.DiGraph, data=(('weight',float),) )
-        mapping = {item: idx for idx, item in enumerate(G.nodes())}
-        G = nx.relabel_nodes(G, mapping)
         Adj = nx.adjacency_matrix(G)
         Adj += Adj.T
         Adj /= Adj.max()
         G = nx.from_numpy_matrix(Adj.todense())
+
         comps = nx.connected_components(G)
         comp_max_idx = max(comps, key=lambda x: len(x))
         G = G.subgraph(comp_max_idx)
+        mapping = {item: idx for idx, item in enumerate(G.nodes())}
+        G = nx.relabel_nodes(G, mapping)
     return G
 
 

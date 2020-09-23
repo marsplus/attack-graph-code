@@ -1,8 +1,8 @@
 """
-sir_simulations.py
+SIS_simulations.py
 ------------------
 
-Simulate SIR dynamics on graph and attacked graph.
+Simulate SIS dynamics on graph and attacked graph.
 
 """
 import os
@@ -44,7 +44,7 @@ MODE = 'min_eigcent_SP'
 
 
 def run_sis(original, attacked, budget, num_sim=numSim):
-    """Sun SIR simulations on both graphs."""
+    """run SIS simulations on both graphs."""
     graphs = {'original': original, 'attacked': attacked}
     rows = []
     for name in graphs:
@@ -99,7 +99,7 @@ def dispatch(params):
 
 pool = Pool(processes=numCPU)
 params = []
-expName = ['equalAlpha']
+expName = ['equalAlpha', 'alpha1=1', 'alpha2=0', 'alpha3=1']
 for Key in expName:
     params.append(Key)
 
