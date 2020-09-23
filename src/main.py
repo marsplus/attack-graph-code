@@ -88,15 +88,16 @@ def gen_graph(graph_type, graph_id=1):
     elif graph_type == 'BTER':
         G = nx.read_edgelist('../data/BTER_{:02d}.txt'.format(graph_id), nodetype=int)
     elif graph_type == 'Airport':
-        G = nx.read_edgelist('../data/US-airport.txt', nodetype=int, data=(('weight',float),) )
+        G = nx.read_edgelist('../data/US-airport.txt', nodetype=int, create_using=nx.DiGraph, data=(('weight',float),) )
+        mapping = {item: idx for idx, item in enumerate(G.nodes())}
+        G = nx.relabel_nodes(G, mapping)
+        Adj = nx.adjacency_matrix(G)
+        Adj += Adj.T
+        Adj /= Adj.max()
+        G = nx.from_numpy_matrix(Adj)
         comps = nx.connected_components(G)
         comp_max_idx = max(comps, key=lambda x: len(x))
         G = G.subgraph(comp_max_idx)
-        mapping = {item: idx for idx, item in enumerate(G.nodes())}
-        G = nx.relabel_nodes(G, mapping)
-        Adj = nx.adjacency_matrix(G).todense() 
-        Adj /= Adj.max()
-        G = nx.from_numpy_matrix(Adj)
     return G
 
 
