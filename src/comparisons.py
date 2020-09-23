@@ -78,7 +78,7 @@ def melt(graph, k):
     # 10: end for
     score = {}
     for i, j in zip(*A.nonzero()):
-        if (i, j) not in score and (j, i) not in score:
+        if i != j and (i, j) not in score and (j, i) not in score:
             score[(i, j)] = u[i] * v[j]
 
     # 11: return top-k edges with the highest score
@@ -131,23 +131,23 @@ def gel(graph, k):
     # 3: find the subset of k + d_in nodes with the highest left eigenscores
     # u_i. Index them by I
     num_edges = min(k + d_in, graph.size()) # do not take more edges than exist
-    I = np.argsort(u)[-num_edges:]
+    I = np.argsort(u)#[num_edges:]
 
     # 4: find the subset of k + d_out nodes with the highest right eigenscores
     # v_j. Index them by J
     num_edges = min(k + d_out, graph.size()) # do not take more edges than exist
-    J = np.argsort(u)[-num_edges:]
+    J = np.argsort(u)#[num_edges:]
 
     # 5. index by P the set of all edges e=(i,j), i∈I, j∈J with A(i,j)=0
     P = [(i, j) for i in I for j in J
-         if abs(A[i, j]) < 1e-5 # add only if they are not already neighbors
-         and i != j             # don't add self-loops
+         if abs(A[i, j]) < 1e-5  # add only if they are not already neighbors
+         and i != j              # don't add self-loops
     ]
 
     # 6: for each in P, define score(e) := u(i) * v(j)
     score = {}
     for i, j in P:
-        if (i, j) not in score and (j, i) not in score:
+        if i != j and (i, j) not in score and (j, i) not in score:
             score[(i, j)] = u[i] * v[j]
 
     # 8: return top-k non-existing edges with the highest scores among P.
@@ -248,14 +248,24 @@ def max_absent_edge(graph, cent='deg'):
     the betweenness centrality of the two nodes at its endpoints.
 
     """
-    absent_edges = [(u, v) for u in graph for v in graph if (u, v) not in graph.edges]
+    absent_edges = [(u, v)
+                    for u in graph
+                    for v in graph
+                    if (u, v) not in graph.edges
+                    and u != v]
     if cent == 'deg':
         deg = graph.degree()
-        cent_dict = {e: deg(e[0]) + deg(e[1]) for e in absent_edges}
+        cur_max = float('-inf')
+        cur_edge = None
+        for e in absent_edges:
+            if deg[e[0]] + deg[e[1]] > cur_max:
+                cur_edge = e
+        return cur_edge
+
     elif cent == 'bet':
         bet = nx.betweenness_centrality(graph)
         cent_dict = {e: bet(e[0]) + bet(e[1]) for e in absent_edges}
-    return max(cent_dict, key=cent_dict.get) if cent_dict else None
+        return max(cent_dict, key=cent_dict.get) if cent_dict else None
 
 
 def max_edge(graph, cent='deg'):
@@ -274,10 +284,16 @@ def max_edge(graph, cent='deg'):
 
     """
     if cent == 'deg':
-        cent_dict = {e: graph.degree(e[0]) + graph.degree(e[1]) for e in graph.edges()}
+        deg = graph.degree()
+        cur_max = float('-inf')
+        cur_edge = None
+        for e in graph.edges():
+            if deg[e[0]] + deg[e[1]] > cur_max:
+                cur_edge = e
+        return cur_edge
     elif cent == 'bet':
         cent_dict = nx.edge_betweenness_centrality(graph)
-    return max(cent_dict, key=cent_dict.get) if cent_dict else None
+        return max(cent_dict, key=cent_dict.get) if cent_dict else None
 
 
 def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='deg'):
@@ -382,6 +398,7 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
             else:
                 print('Did not find edge to add/remove.')
                 failure_prev = True
+                mode = 'rem' if mode == 'add' else 'add'
                 continue
 
         # Check whether applying the changes would keep us within budget
@@ -423,9 +440,10 @@ def centrality_attack(graph, target, budget_edges=None, budget_eig=None, cent='d
 
 def main():
     """Run experiments."""
-    graph = nx.barabasi_albert_graph(500, 3)
-    for _, _, data in graph.edges(data=True):
-        data['weight'] = random.randint(0, 10)
+    # graph = nx.barabasi_albert_graph(500, 3)
+    # for _, _, data in graph.edges(data=True):
+    #     data['weight'] = random.randint(0, 10)
+    graph = nx.karate_club_graph()
 
     # make sure to use graph.subgraph to get a SubGraphView
     random_nodes = np.random.choice(graph, size=10)
