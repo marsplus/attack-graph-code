@@ -22,9 +22,11 @@ You need **Python3.7** and conda to install required packages.
 
 ### Reference
 This code based is used to reproduce the experiments in the following paper:
+```
 @article{yu2020optimizing,
   title={Optimizing Graph Structure for Targeted Diffusion},
   author={Yu, Sixie and Torres, Leonardo and Alfeld, Scott and Eliassi-Rad, Tina and Vorobeychik, Yevgeniy},
   journal={arXiv preprint arXiv:2008.05589},
   year={2020}
 }
+```
