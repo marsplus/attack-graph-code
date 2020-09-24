@@ -26,16 +26,21 @@ def run_all(graph, target, name):
         print(gamma)
         budget = gamma * eig
         attacked = centrality_attack(graph, target, budget_eig=budget, cent='deg')
-        fn = 'results/{}_{}_{}.edges'.format(name, 'deg', gamma)
+        fn = 'comparison_results/{}_{}_{}.edges'.format(name, 'deg', gamma)
         write_output(attacked, fn)
 
         attacked = melt_gel(graph, target, budget_eig=budget)
-        fn = 'results/{}_{}_{}.edges'.format(name, 'gel', gamma)
+        fn = 'comparison_results/{}_{}_{}.edges'.format(name, 'gel', gamma)
         write_output(attacked, fn)
 
 
 def read_email():
     graph = nx.read_edgelist('data/datasets/datasets/email/email-Eu-core-cc.txt', nodetype=int)
+    graph.remove_edges_from(nx.selfloop_edges(graph))
+
+    # get the largest component
+    nodes = max(nx.connected_components(graph), key=len)
+    graph = graph.subgraph(nodes).copy()
 
     # the target is community 37, which should have 16 nodes
     target_nodes = []
@@ -75,6 +80,10 @@ def read_airport():
     max_weight = max(data['weight'] for _, _, data in graph.edges(data=True))
     for u, v in graph.edges():
         graph.edges[u, v]['weight'] /= max_weight
+
+    # get the largest component
+    nodes = max(nx.connected_components(graph), key=len)
+    graph = graph.subgraph(nodes).copy()
 
     # target: the node 540 and its neighborhood
     center = 540

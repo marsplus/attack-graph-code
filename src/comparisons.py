@@ -260,6 +260,7 @@ def max_absent_edge(graph, cent='deg'):
         for e in absent_edges:
             if deg[e[0]] + deg[e[1]] > cur_max:
                 cur_edge = e
+                cur_max = deg[e[0]] + deg[e[1]]
         return cur_edge
 
     elif cent == 'bet':
@@ -289,8 +290,10 @@ def max_edge(graph, cent='deg'):
         cur_edge = None
         for e in graph.edges():
             if deg[e[0]] + deg[e[1]] > cur_max:
+                cur_max = deg[e[0]] + deg[e[1]]
                 cur_edge = e
         return cur_edge
+
     elif cent == 'bet':
         cent_dict = nx.edge_betweenness_centrality(graph)
         return max(cent_dict, key=cent_dict.get) if cent_dict else None
