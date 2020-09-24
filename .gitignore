@@ -10,3 +10,7 @@ src/flycheck*
 result/*
 data/*.raw
 .DS_Store/*
+data/datasets
+data/datasets.zip
+attack-graph-doc.zip
+attack-graph-doc/
