@@ -41,10 +41,8 @@ MAPPING = {
 
 
 
-# run a community detection algorithm, then
-# randomly pick one community as S.
-def select_comm(graph, mapping=None):
-    if args.graph_type == 'Email':
+def select_comm(graph, graph_type, mapping=None):
+    if graph_type == 'Email':
         # read into community info
         with open('../data/email-Eu-core-department-labels-cc.txt', 'r') as fid:
             f_label = fid.readlines()
@@ -56,19 +54,24 @@ def select_comm(graph, mapping=None):
             else:
                 comm_to_nodes[commID].append(mapping[nodeID])
         comm_size = sorted([(key, len(comm_to_nodes[key])) for key in comm_to_nodes.keys()], key=lambda x: x[1])
-        comm = comm_to_nodes[comm_size[math.floor(len(comm_size) * 0.5)][0]]
-    elif args.graph_type == 'Airport':
+        selected_comm = comm_size[math.floor(len(comm_size) * 0.5)][0]
+        comm = comm_to_nodes[selected_comm]
+
+    elif graph_type == 'Airport':
         deg = list(dict(graph.degree()).items())
         deg = sorted(deg, key=lambda x: x[1])
         selected_node = deg[math.floor(len(deg) * 0.9)][0] 
         comm = list(graph.neighbors(selected_node)) + [selected_node] 
-    elif args.graph_type == 'Brain':
+
+    elif graph_type == 'Brain':
         comm = list(range(len(graph)-100, len(graph)))
+
     else:
         all_comms = list(greedy_modularity_communities(graph))
         all_comms = sorted(all_comms, key=lambda x: len(x))
         comm = list(all_comms[math.floor(len(all_comms) * 0.5)])
         assert(len(comm) != 0)
+
     return comm
 
 
@@ -86,7 +89,7 @@ def gen_graph(graph_type, graph_id=1):
     elif graph_type == 'BTER':
         G = nx.read_edgelist('../data/BTER_{:02d}.txt'.format(graph_id), nodetype=int)
     elif graph_type == 'Airport':
-        G = nx.read_edgelist('../data/US-airport.txt', nodetype=int, create_using=nx.DiGraph, data=(('weight',float),) )
+        G = nx.read_edgelist('../data/US-airport.txt', nodetype=int, create_using=nx.DiGraph, data=(('weight', float),) )
         Adj = nx.adjacency_matrix(G)
         Adj += Adj.T
         Adj /= Adj.max()
@@ -251,50 +254,52 @@ def rounding(Attacker):
     return ( torch.tensor(B, dtype=torch.float32), addedEdges )
 
 
-result = defaultdict(list)
-graph_ret = defaultdict(list)
+if __name__ == '__main__':
 
-for i in range(args.numExp):
-    G = gen_graph(args.graph_type, i)
-    mapping = {item: idx for idx, item in enumerate(G.nodes())}
-    G = nx.relabel_nodes(G, mapping)
-    adj = nx.adjacency_matrix(G).todense()
+    result = defaultdict(list)
+    graph_ret = defaultdict(list)
 
-    if args.graph_type == "Email":
-        S = select_comm(G, mapping)
-    else:
-        S = select_comm(G)
+    for i in range(args.numExp):
+        G = gen_graph(args.graph_type, i)
+        mapping = {item: idx for idx, item in enumerate(G.nodes())}
+        G = nx.relabel_nodes(G, mapping)
+        adj = nx.adjacency_matrix(G).todense()
 
-    print("---Comm size: {}    Graph size: {}---".format(len(S), len(G)))
+        if args.graph_type == "Email":
+            S = select_comm(G, args.graph_type, mapping)
+        else:
+            S = select_comm(G, args.graph_type)
 
-    S_prime = list(set(G.nodes()) - set(S))
-    S = torch.LongTensor(S)
-    S_prime = torch.LongTensor(S_prime)
+        print("---Comm size: {}    Graph size: {}---".format(len(S), len(G)))
 
-    for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
-        opt_sol = launch_attach()
-        result[budget_change_ratio].append(opt_sol)
+        S_prime = list(set(G.nodes()) - set(S))
+        S = torch.LongTensor(S)
+        S_prime = torch.LongTensor(S_prime)
 
-        ## attacked graphs
-        Attacker = opt_sol[-1]
-        Adj_attacked = Attacker.get_attacked_adj()
-        G_attacked = nx.from_numpy_matrix(Attacker.get_attacked_adj().numpy())
-        targets = [True if i in S else False for i in range(G.order())]
-        targets = {idx: {'target': targets[idx]} for idx, _ in enumerate(targets)}
-        nx.set_node_attributes(G_attacked, targets)
-        nx.set_node_attributes(G, targets)
-        graph_ret[budget_change_ratio].append({'original': G, 'attacked': G_attacked})
+        for budget_change_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
+            opt_sol = launch_attach()
+            result[budget_change_ratio].append(opt_sol)
+
+            ## attacked graphs
+            Attacker = opt_sol[-1]
+            Adj_attacked = Attacker.get_attacked_adj()
+            G_attacked = nx.from_numpy_matrix(Attacker.get_attacked_adj().numpy())
+            targets = [True if i in S else False for i in range(G.order())]
+            targets = {idx: {'target': targets[idx]} for idx, _ in enumerate(targets)}
+            nx.set_node_attributes(G_attacked, targets)
+            nx.set_node_attributes(G, targets)
+            graph_ret[budget_change_ratio].append({'original': G, 'attacked': G_attacked})
 
 
-if args.save_result:
-    # save attacked graphs to disk
-    Key = args.mode
-    W = 'weighted' if args.weighted else 'unweighted'
-    with open('../result/{}/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(W, args.graph_type, args.numExp, Key), 'wb') as fid:
-        pickle.dump(graph_ret, fid)
+    if args.save_result:
+        # save attacked graphs to disk
+        Key = args.mode
+        W = 'weighted' if args.weighted else 'unweighted'
+        with open('../result/{}/min_eigcent_SP/{}_numExp_{}_attacked_graphs_{}.p'.format(W, args.graph_type, args.numExp, Key), 'wb') as fid:
+            pickle.dump(graph_ret, fid)
 
-    with open('../result/{}/min_eigcent_SP/{}_numExp_{}_ret_{}.p'.format(W, args.graph_type, args.numExp, Key), 'wb') as fid:
-        pickle.dump(result, fid)
+        with open('../result/{}/min_eigcent_SP/{}_numExp_{}_ret_{}.p'.format(W, args.graph_type, args.numExp, Key), 'wb') as fid:
+            pickle.dump(result, fid)
 
 
 
