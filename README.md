@@ -21,7 +21,7 @@ You need **Python3.7** and conda to install required packages.
   
 
 ### Reference
-This code based is used to reproduce the experiments in the following paper:
+This code is used to reproduce the experiments in the following paper:
 ```
 @article{yu2020optimizing,
   title={Optimizing Graph Structure for Targeted Diffusion},
