@@ -6,11 +6,12 @@ from utils import *
 
 
 class Threat_Model(nn.Module):
-    def __init__(self, S, S_prime, Alpha, budget_change_ratio, learning_rate, G):
+    def __init__(self, S, S_prime, Alpha, budget_change_ratio, learning_rate, G, weighted=True):
         super(Threat_Model, self).__init__()
         self.numNodes = len(G)
         self.avgDeg = np.mean([G.degree(i) for i in range(self.numNodes)])
         self.maxDeg = np.max(list(dict(G.degree).values()))
+        self.weighted_graph = weighted
 
         self.S = S
         self.S_prime = S_prime
@@ -68,14 +69,13 @@ class Threat_Model(nn.Module):
 
         ## impact on S
         self.impact_S_original = v_original[self.S].sum()
-        #self.impact_S_original = -self.lambda1_SP_original 
 
 
         # |lambda1(\tilde{A})-lambda1(A)| <= lambda1(A) * budget_change_ratio
         self.budget = self.lambda1_original * budget_change_ratio
 
 
-        ## requires_grad_(True): tells PyTorch to starting tracking the gradients of this parameter
+        ## requires_grad_(True): starting tracking the gradients of this parameter
         self.adj_tensor = torch.tensor(adj, dtype=torch.float32).requires_grad_(True)
         self.adj_tensor = nn.Parameter(self.adj_tensor)
         
@@ -84,7 +84,9 @@ class Threat_Model(nn.Module):
             x_copy = x.clone()
             x_copy = (1/2) *( x_copy + torch.transpose(x_copy, 0, 1))
             x_copy -= torch.diag(torch.diag(x_copy))
-            x_copy *= self.original_adj
+            if self.weighted_graph:
+                # for weighted graphs only existed weights are modified
+                x_copy *= self.original_adj
             return x_copy
         self.adj_tensor.register_hook(lambda x: _mask_(x))
 
@@ -104,13 +106,12 @@ class Threat_Model(nn.Module):
         x_s_prime[self.S_prime] = 1
 
         # select the sub adjacency matrix corresponding to S and S_prime
-        adj_tensor_S       = get_submatrix(self.adj_tensor, self.S, self.S)
-        adj_tensor_SP      = get_submatrix(self.adj_tensor, self.S_prime, self.S_prime)
+        adj_tensor_S   = get_submatrix(self.adj_tensor, self.S, self.S)
+        adj_tensor_SP  = get_submatrix(self.adj_tensor, self.S_prime, self.S_prime)
     
-        # all sorts of largest eigenvalues 
+        # get largest eigenvalues 
         v_est = power_method(self.adj_tensor)
         
-        #eigVals_S, eigVecs_S     = torch.symeig(adj_tensor_S, eigenvectors=True)
         v_est_S        = power_method(adj_tensor_S)
         self.lambda1_S = v_est_S @ adj_tensor_S @ v_est_S 
 
@@ -127,9 +128,7 @@ class Threat_Model(nn.Module):
 
         ## negative impact
         self.impact_S = v_est[self.S].sum()
-        #self.impact_S = -self.lambda1_SP
 
-        
         # utility function 
         U1 =  self.alpha_1 * self.lambda1_S / self.avgDeg_S
         U2 =  self.alpha_2 * self.impact_S 
