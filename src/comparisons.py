@@ -19,8 +19,8 @@ def _clean_top_eig(m):
     for i, comp in enumerate(vec):
         if abs(comp) < 1e-7:
             vec[i] = 0
-        if vec.max() < 0:
-            vec *= -1
+    if vec.min() < 0:
+        vec *= -1
     return vec
 
 
@@ -133,10 +133,6 @@ def gel(graph, k):
     # to the leading eigenvalue (u, v ≥ 0)
     A = nx.adjacency_matrix(graph).astype('f')
     u, v = left_right(A)
-    if u.max() < 0:
-        u *= -1
-    if v.max() < 0:
-        v *= -1
 
     # 2: calculate the maximum in-degree (d_in) and out-degree (d_out) of A
     d_in, d_out = int(A.sum(axis=0).max()), int(A.sum(axis=1).max())
