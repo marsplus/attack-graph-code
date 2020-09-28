@@ -12,12 +12,22 @@ import networkx as nx
 import scipy.sparse as sparse
 
 
+def _clean_top_eig(m):
+    """See left_right."""
+    vec = sparse.linalg.eigs(m, k=1, return_eigenvectors=True)[1]
+    vec = vec.reshape((-1,)).real
+    for i, comp in enumerate(vec):
+        if abs(comp) < 1e-7:
+            vec[i] = 0
+        if vec.max() < 0:
+            vec *= -1
+    return vec
+
+
 def left_right(matrix):
     """Return the principal left and right eigenvectors of the matrix."""
-    right = sparse.linalg.eigs(matrix, k=1, return_eigenvectors=True)[1]
-    right = right.reshape((-1,)).real
-    left = sparse.linalg.eigs(matrix.T, k=1, return_eigenvectors=True)[1]
-    left = left.reshape((-1,)).real
+    right = _clean_top_eig(matrix)
+    left = _clean_top_eig(matrix.T)
     return left, right
 
 
@@ -57,23 +67,26 @@ def melt(graph, k):
     # 2 in Reference [1].  They have been only slightly modified for clarity
     A = nx.adjacency_matrix(graph).astype('f')
 
-    # 1: compute the leading eigenvalue λ of A; let u and v be the
+    # 1: compute the leading eigenvalue λ of a; let u and v be the
     # corresponding left and right eigenvectors, respectively
     u, v = left_right(A)
 
-    # 2: if mini=1,...,nu(i) < 0 then
+    # The following lines of the algorithm say
+    #
+    # 2: if min_i u(i) < 0 then
     # 3: assign u ← −u
     # 4: end if
-    if u.min() < 0:
-        u *= -1
-
-    # 5: if mini=1,...,nv(i) < 0 then
+    # 5: if min_i v(i) < 0 then
     # 6: assign v ← −v
     # 7: end if
-    if v.min() < 0:
-        v *= -1
+    #
+    # These lines assume that all the components of the eigenvectors u, v are
+    # of the same sign.  This is guaranteed, in theory, by the Perron-Frobenius
+    # theorem.  However, when numerically computing these eigenvectors, any
+    # components that are close to zero may have the wrong sign.  The procedure
+    # in left_right already deals with this.
 
-    # 8: for each edge e=(i, j) with A[i, j]=1 do
+    # 8: for each edge e=(i, j) with a[i, j]=1 do
     # 9: score(e) = u[i] * v[j]
     # 10: end for
     score = {}
