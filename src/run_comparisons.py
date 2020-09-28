@@ -10,6 +10,7 @@ import numpy as np
 from scipy import sparse
 import networkx as nx
 from comparisons import centrality_attack, melt_gel
+from collections import Counter
 
 
 def write_output(graph, filename):
@@ -27,10 +28,14 @@ def run_all(graph, target, name):
         budget = gamma * eig
         attacked = centrality_attack(graph, target, budget_eig=budget, cent='deg')
         fn = 'comparison_results/{}_{}_{}.edges'.format(name, 'deg', gamma)
+        zero = Counter(dict(attacked.degree()).values())[0]
+        print(f'There are {zero} nodes with degree zero in {fn}')
         write_output(attacked, fn)
 
         attacked = melt_gel(graph, target, budget_eig=budget)
         fn = 'comparison_results/{}_{}_{}.edges'.format(name, 'gel', gamma)
+        zero = Counter(dict(attacked.degree()).values())[0]
+        print(f'There are {zero} nodes with degree zero in {fn}')
         write_output(attacked, fn)
 
 
