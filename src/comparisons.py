@@ -403,7 +403,6 @@ def max_edge(graph, tol, cent='deg', weighted=False):
                 cur_max = deg[e[0]] + deg[e[1]]
                 cur_edge = e
 
-        print(graph.edges[cur_edge]['weight'])
         return cur_edge
 
     elif cent == 'bet':
@@ -540,19 +539,20 @@ def centrality_attack(
                     if not staged_changes.has_edge(*edge):
                         staged_changes.add_edge(*edge, weight=init_weight)
                     else:
-                        staged_changes.edges[edge]['weight'] *= discount_factor
+                        staged_changes.edges[edge]['weight'] /= discount_factor
                 else:
                     staged_changes.add_edge(*edge)
             else:
                 if weighted:
-                    staged_changes.edges[edge]['weight'] /= discount_factor
+                    staged_changes.edges[edge]['weight'] *= discount_factor
                 else:
                     staged_changes.remove_edge(*edge)
-            staged_adj = nx.adjacency_matrix(staged_changes)
             # there is no implementation for 2-norms for spectral matrices
             # so we must convert to dense...
+            staged_adj = nx.adjacency_matrix(staged_changes)
             diff = (adj - staged_adj).A
             spent_budget = np.linalg.norm(diff, ord=2)
+            print('diff during staging: ', spent_budget)
         if not keep_going(spent_budget):
             print(f'Applying the next change would incur in {spent_budget:.3f} budget. Stopping.')
             break
@@ -568,7 +568,6 @@ def centrality_attack(
                     attacked.add_edge(*edge, weight=init_weight)
                 else:
                     attacked.edges[edge]['weight'] /= discount_factor
-                print(attacked.edges[edge]['weight'])
             else:
                 attacked.add_edge(*edge)
 
@@ -576,7 +575,6 @@ def centrality_attack(
             print(f'rem: ({edge[0]:02d}, {edge[1]:02d}).', end='')
             if weighted:
                 attacked.edges[edge]['weight'] *= discount_factor
-                print(attacked.edges[edge]['weight'])
             else:
                 attacked.remove_edge(*edge)
 

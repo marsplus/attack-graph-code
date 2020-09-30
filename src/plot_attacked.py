@@ -11,12 +11,18 @@ import matplotlib.pyplot as plt
 from comparisons import read_email, read_brain, read_airport
 
 
-def read_attacked(fn, weight=False):
-    return nx.read_edgelist(
-        fn,
-        delimiter=' ',
-        nodetype=int,
-        data=([('weight', float)] if weight else False))
+def read_attacked(fn, nodes, weighted=False):
+    attacked = nx.Graph()
+    attacked.add_nodes_from(nodes)
+    with open(fn) as file:
+        for line in file:
+            if weighted:
+                node1, node2, weight = line.split()
+                attacked.add_edge(int(node1), int(node2), weight=float(weight))
+            else:
+                node1, node2, _ = line.split()
+                attacked.add_edge(int(node1), int(node2))
+    return attacked
 
 
 def main():
