@@ -38,6 +38,18 @@ def read_brain():
     return graph, target
 
 
+def read_data(name):
+    fn = f'processed_data/{name}.edgelist'
+    graph = nx.read_edgelist(fn, nodetype=int, data=[('weight', float)])
+
+    fn = f'processed_data/{name}-target.txt'
+    with open(fn) as file:
+        target_nodes = [int(x) for x in file.read().split(', ')]
+    target = graph.subgraph(target_nodes)
+
+    return graph, target
+
+
 def read_airport():
     graph = nx.Graph()
     with open('data/datasets/datasets/airport/US-airport.txt', 'r') as file:
@@ -168,7 +180,7 @@ def melt(graph, k, tol):
     return [(nodes[u], nodes[v]) for u, v in edges]
 
 
-def gel(graph, k):
+def gel(graph, k, tol):
     """See Algorithm 2 in [1].
 
     Parameters
@@ -208,12 +220,12 @@ def gel(graph, k):
     # 3: find the subset of k + d_in nodes with the highest left eigenscores
     # u_i. Index them by I
     num_edges = min(k + d_in, graph.size()) # do not take more edges than exist
-    I = np.argsort(u)#[num_edges:]
+    I = np.argsort(u)
 
     # 4: find the subset of k + d_out nodes with the highest right eigenscores
     # v_j. Index them by J
     num_edges = min(k + d_out, graph.size()) # do not take more edges than exist
-    J = np.argsort(u)#[num_edges:]
+    J = np.argsort(u)
 
     # 5. index by P the set of all edges e=(i,j), i∈I, j∈J with A(i,j)=0
     P = [(i, j) for i in I for j in J
@@ -224,7 +236,10 @@ def gel(graph, k):
     # 6: for each in P, define score(e) := u(i) * v(j)
     score = {}
     for i, j in P:
-        if i != j and (i, j) not in score and (j, i) not in score:
+        if (i != j
+            and abs(A[i, j]) < tol
+            and (i, j) not in score
+            and (j, i) not in score):
             score[(i, j)] = u[i] * v[j]
 
     # 8: return top-k non-existing edges with the highest scores among P.
@@ -240,6 +255,7 @@ def melt_gel(
         budget_eig=None,
         weighted=True,
         discount_factor=0.9,
+        milestones=None,
 ):
     """Use NetMelt and NetGel to attack the graph spectrum.
 
@@ -294,7 +310,8 @@ def melt_gel(
     if budget_eig:
         return centrality_attack(graph, target, budget_edges=None,
                                  budget_eig=budget_eig, weighted=weighted,
-                                 cent='gel', discount_factor=discount_factor)
+                                 cent='gel', discount_factor=discount_factor,
+                                 milestones=milestones)
 
     # Compute the necessary graphs.  Make sure they are SubGraphViews of
     # attacked, not of the original graph.
@@ -333,7 +350,7 @@ def melt_gel(
     return attacked
 
 
-def max_absent_edge(graph, cent='deg', weighted=False):
+def max_absent_edge(graph, tol, cent='deg', weighted=False):
     """Return the absent edge with the maximum centrality.
 
     Parameters
@@ -349,11 +366,19 @@ def max_absent_edge(graph, cent='deg', weighted=False):
     the betweenness centrality of the two nodes at its endpoints.
 
     """
-    absent_edges = [(u, v)
-                    for u in graph
-                    for v in graph
-                    if (u, v) not in graph.edges
-                    and u != v]
+    if not weighted:
+        absent_edges = [(u, v)
+                        for u in graph for v in graph
+                        if (u, v) not in graph.edges
+                        and u != v]
+    else:
+        absent_edges = [(u, v)
+                        for u in graph for v in graph
+                        if u != v
+                        and (
+                                (u, v) not in graph.edges
+                                or graph.edges[u, v]['weight'] < tol
+                        )]
 
     if cent == 'deg':
         deg = graph.degree(weight=('weight' if weighted else None))
@@ -396,8 +421,9 @@ def max_edge(graph, tol, cent='deg', weighted=False):
             # option.  In these cases, the algorithm will keep modifying that
             # edge for a long time.  To avoid that, just focus on edges with
             # high weight.
-            if graph.edges[e]['weight'] < tol:
-                continue
+            if weighted:
+                if graph.edges[e]['weight'] < tol:
+                    continue
 
             if deg[e[0]] + deg[e[1]] > cur_max:
                 cur_max = deg[e[0]] + deg[e[1]]
@@ -410,6 +436,10 @@ def max_edge(graph, tol, cent='deg', weighted=False):
         return max(cent_dict, key=cent_dict.get) if cent_dict else None
 
 
+def norm(m):
+    return sparse.linalg.svds(m.astype('f'), k=1, return_singular_vectors=False)[0]
+
+
 def centrality_attack(
         graph,
         target,
@@ -418,6 +448,7 @@ def centrality_attack(
         cent='deg',
         weighted=False,
         discount_factor=0.9,
+        milestones=None
 ):
     """Use edge centrality to attack the graph spectrum.
 
@@ -441,6 +472,10 @@ def centrality_attack(
 
     weighted (bool): if True, modify weights of edges.  if True, add/remove
     edges.
+
+    milestones (list): if None, retrun the last attacked graph. If a list,
+    return a list of attacked graphs, one for each time the budget supercedes
+    the milestone.
 
     Notes
     -----
@@ -489,14 +524,19 @@ def centrality_attack(
     # subgraph that will be added.  get_edge_to_rem must return an existing
     # edge inside of the target subgraph that will be removed.  Most of the
     # time we will choose them like this...
-    tol = np.percentile([outside_target.edges[e]['weight'] for e in outside_target.edges], 25)
-    get_edge_to_add = lambda: max_absent_edge(target, cent=cent, weighted=weighted)
-    get_edge_to_rem = lambda: max_edge(outside_target, tol, cent=cent, weighted=weighted)
+    if weighted:
+        all_weights = [outside_target.edges[e]['weight'] for e in outside_target.edges]
+        lower_tol = np.percentile(all_weights, 25)
+        upper_tol = np.percentile(all_weights, 75)
+    else:
+        lower_tol, upper_tol = float('-inf'), float('inf')
+    get_edge_to_add = lambda: max_absent_edge(target, upper_tol, cent=cent, weighted=weighted)
+    get_edge_to_rem = lambda: max_edge(outside_target, lower_tol, cent=cent, weighted=weighted)
     # ... except when the centrality is 'gel'
     if cent == 'gel':
         if budget_eig:
-            get_edge_to_add = lambda: (gel(target, 1) or [[]])[0]
-            get_edge_to_rem = lambda: (melt(outside_target, 1, tol) or [[]])[0]
+            get_edge_to_add = lambda: (gel(target, 1, upper_tol) or [[]])[0]
+            get_edge_to_rem = lambda: (melt(outside_target, 1, lower_tol) or [[]])[0]
         else:
             print('If you want to use NetGel with a budget given '
                   'by a number of edges, use melt_gel() instead.')
@@ -506,12 +546,18 @@ def centrality_attack(
     if weighted:
         init_weight = np.median([d['weight'] for _, _, d in graph.edges(data=True)])
 
+    if milestones:
+        all_attacked = []
+        cur_milestone = 0
+
     ###
     ### Main loop
     ###
 
     # If we fail to find an edge to modify twice in a row, we will break
     failure_prev = False
+
+    print('budget: ', budget_eig)
 
     while True:
 
@@ -529,61 +575,57 @@ def centrality_attack(
                 mode = 'rem' if mode == 'add' else 'add'
                 continue
 
+        # We can only reach here if we have found an edge
+        failure_prev = False
+
         # Check whether applying the changes would keep us within budget
         if budget_edges:
             spent_budget += 1
         if budget_eig:
-            staged_changes = attacked.copy()
+            prev_attacked = attacked.copy()
+
             if mode == 'add':
+                print(f'add: ({edge[0]:02d}, {edge[1]:02d}).', end='')
                 if weighted:
-                    if not staged_changes.has_edge(*edge):
-                        staged_changes.add_edge(*edge, weight=init_weight)
+                    if not attacked.has_edge(*edge):
+                        attacked.add_edge(*edge, weight=init_weight)
                     else:
-                        staged_changes.edges[edge]['weight'] /= discount_factor
+                        attacked.edges[edge]['weight'] /= discount_factor
                 else:
-                    staged_changes.add_edge(*edge)
+                    attacked.add_edge(*edge)
+
             else:
+                print(f'rem: ({edge[0]:02d}, {edge[1]:02d}).', end='')
                 if weighted:
-                    staged_changes.edges[edge]['weight'] *= discount_factor
+                    attacked.edges[edge]['weight'] *= discount_factor
                 else:
-                    staged_changes.remove_edge(*edge)
-            # there is no implementation for 2-norms for spectral matrices
-            # so we must convert to dense...
-            staged_adj = nx.adjacency_matrix(staged_changes)
-            diff = (adj - staged_adj).A
-            spent_budget = np.linalg.norm(diff, ord=2)
-            print('diff during staging: ', spent_budget)
+                    attacked.remove_edge(*edge)
+
+            attacked_adj = nx.adjacency_matrix(attacked)
+            spent_budget = norm(adj - attacked_adj)
+
         if not keep_going(spent_budget):
             print(f'Applying the next change would incur in {spent_budget:.3f} budget. Stopping.')
+            print(f'Next change: {mode} edge {edge}')
+
+            if milestones:
+                all_attacked.append(prev_attacked)
+            else:
+                attacked = prev_attacked
+
             break
 
-        # If we reach here, we can finally apply the changes (and not just
-        # stage them).  Note we cannot just assign attacked = staged_changes
-        # because attacked needs to reamain a SubGraphView of the original
-        # graph.
-        if mode == 'add':
-            print(f'add: ({edge[0]:02d}, {edge[1]:02d}).', end='')
-            if weighted:
-                if not attacked.has_edge(*edge):
-                    attacked.add_edge(*edge, weight=init_weight)
-                else:
-                    attacked.edges[edge]['weight'] /= discount_factor
-            else:
-                attacked.add_edge(*edge)
-
-        else:
-            print(f'rem: ({edge[0]:02d}, {edge[1]:02d}).', end='')
-            if weighted:
-                attacked.edges[edge]['weight'] *= discount_factor
-            else:
-                attacked.remove_edge(*edge)
+        if milestones and spent_budget > milestones[cur_milestone]:
+            all_attacked.append(prev_attacked)
+            cur_milestone += 1
 
         print(f'\tTotal budget spent: {spent_budget:.3f}')
+        print()
 
         # Toggle between adding and removing
         mode = 'rem' if mode == 'add' else 'add'
 
-    return attacked
+    return all_attacked if milestones else attacked
 
 
 def main():
@@ -599,7 +641,7 @@ def main():
         [neigh for rn in random_nodes for neigh in graph.neighbors(rn)]
         + [rn for rn in random_nodes]
     )
-    budget = 20
+    budget = 5
 
     attacked = centrality_attack(graph, target, budget_eig=budget, cent='deg')
     attacked = melt_gel(graph, target, budget_eig=budget)
