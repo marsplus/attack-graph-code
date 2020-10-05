@@ -342,7 +342,8 @@ def melt_gel(
             attacked.edges[edge]['weight'] /= discount_factor
 
     else:
-        tol = np.percentile([graph.edges[e]['weight'] for e in graph.edges], 25)
+        # tol = np.percentile([graph.edges[e]['weight'] for e in graph.edges], 25)
+        tol = np.percentile([graph.edges[e]['weight'] for e in graph.edges], 10)
         to_add = gel(target, target_budget)
         to_rem = melt(outside_target, outside_budget, tol)
         attacked.add_edges_from(to_add)
@@ -526,8 +527,12 @@ def centrality_attack(
     # time we will choose them like this...
     if weighted:
         all_weights = [outside_target.edges[e]['weight'] for e in outside_target.edges]
-        lower_tol = np.percentile(all_weights, 25)
-        upper_tol = np.percentile(all_weights, 75)
+
+        lower_tol = np.percentile(all_weights, 10)
+        upper_tol = np.percentile(all_weights, 90)
+
+        # lower_tol = np.percentile(all_weights, 25)
+        # upper_tol = np.percentile(all_weights, 75)
     else:
         lower_tol, upper_tol = float('-inf'), float('inf')
     get_edge_to_add = lambda: max_absent_edge(target, upper_tol, cent=cent, weighted=weighted)
