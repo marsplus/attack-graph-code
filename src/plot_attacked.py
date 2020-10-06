@@ -1,9 +1,7 @@
 """
 plot_attacked.py
 ----------------
-
 Plot the weights of attacked graphs.
-
 """
 
 import networkx as nx
@@ -62,14 +60,7 @@ def main(name, cent):
 
     plt.suptitle('Brain')
     plt.show()
-<<<<<<< HEAD
-
-
-
-
-=======
     # plt.savefig(f'/tmp/{name}_{cent}_plot.png', dpi=144, bbox_inches='tight')
->>>>>>> 95de7f61a5a09cf81961083d14eb241f0bda29cb
 
 
 
