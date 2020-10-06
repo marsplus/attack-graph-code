@@ -12,30 +12,30 @@ import networkx as nx
 import scipy.sparse as sparse
 
 
-def read_email():
-    graph = nx.read_edgelist('data/datasets/datasets/email/email-Eu-core-cc.txt', nodetype=int)
-    graph.remove_edges_from(nx.selfloop_edges(graph))
+# def read_email():
+#     graph = nx.read_edgelist('data/datasets/datasets/email/email-Eu-core-cc.txt', nodetype=int)
+#     graph.remove_edges_from(nx.selfloop_edges(graph))
 
-    # get the largest component
-    nodes = max(nx.connected_components(graph), key=len)
-    graph = graph.subgraph(nodes).copy()
+#     # get the largest component
+#     nodes = max(nx.connected_components(graph), key=len)
+#     graph = graph.subgraph(nodes).copy()
 
-    # the target is community 37, which should have 16 nodes
-    target_nodes = []
-    with open('data/datasets/datasets/email/email-Eu-core-department-labels-cc.txt', 'r') as file:
-        for line in file:
-            node, community = line.split()
-            if community == '37':
-                target_nodes.append(int(node))
-    assert len(target_nodes) == 15
-    return graph, graph.subgraph(target_nodes)
+#     # the target is community 37, which should have 16 nodes
+#     target_nodes = []
+#     with open('data/datasets/datasets/email/email-Eu-core-department-labels-cc.txt', 'r') as file:
+#         for line in file:
+#             node, community = line.split()
+#             if community == '37':
+#                 target_nodes.append(int(node))
+#     assert len(target_nodes) == 15
+#     return graph, graph.subgraph(target_nodes)
 
 
-def read_brain():
-    adj = np.loadtxt('data/datasets/datasets/brain/Brain.txt')
-    graph = nx.from_numpy_array(adj)
-    target = graph.subgraph(list(range(graph.order() - 100, graph.order())))
-    return graph, target
+# def read_brain():
+#     adj = np.loadtxt('data/datasets/datasets/brain/Brain.txt')
+#     graph = nx.from_numpy_array(adj)
+#     target = graph.subgraph(list(range(graph.order() - 100, graph.order())))
+#     return graph, target
 
 
 def read_data(name):
@@ -50,37 +50,37 @@ def read_data(name):
     return graph, target
 
 
-def read_airport():
-    graph = nx.Graph()
-    with open('data/datasets/datasets/airport/US-airport.txt', 'r') as file:
-        for line in file:
-            u, v, w = line.split()
-            u, v, w = int(u), int(v), float(w)
-            if graph.has_edge(u, v):
-                graph.edges[u, v]['weight'] += w
-                graph.edges[u, v]['count'] += 1
-            else:
-                graph.add_edge(u, v, weight=w, count=1)
+# def read_airport():
+#     graph = nx.Graph()
+#     with open('data/datasets/datasets/airport/US-airport.txt', 'r') as file:
+#         for line in file:
+#             u, v, w = line.split()
+#             u, v, w = int(u), int(v), float(w)
+#             if graph.has_edge(u, v):
+#                 graph.edges[u, v]['weight'] += w
+#                 graph.edges[u, v]['count'] += 1
+#             else:
+#                 graph.add_edge(u, v, weight=w, count=1)
 
-    # take the average
-    for u, v in graph.edges():
-        graph.edges[u, v]['weight'] /= graph.edges[u, v]['count']
+#     # take the average
+#     for u, v in graph.edges():
+#         graph.edges[u, v]['weight'] /= graph.edges[u, v]['count']
 
-    # normalize between 0 and 1
-    max_weight = max(data['weight'] for _, _, data in graph.edges(data=True))
-    for u, v in graph.edges():
-        graph.edges[u, v]['weight'] /= max_weight
+#     # normalize between 0 and 1
+#     max_weight = max(data['weight'] for _, _, data in graph.edges(data=True))
+#     for u, v in graph.edges():
+#         graph.edges[u, v]['weight'] /= max_weight
 
-    # get the largest component
-    nodes = max(nx.connected_components(graph), key=len)
-    graph = graph.subgraph(nodes).copy()
+#     # get the largest component
+#     nodes = max(nx.connected_components(graph), key=len)
+#     graph = graph.subgraph(nodes).copy()
 
-    # target: the node 540 and its neighborhood
-    center = 540
-    target = graph.subgraph(list(graph.neighbors(center)) + [center])
-    assert target.order() == 61
+#     # target: the node 540 and its neighborhood
+#     center = 540
+#     target = graph.subgraph(list(graph.neighbors(center)) + [center])
+#     assert target.order() == 61
 
-    return graph, target
+#     return graph, target
 
 
 def _clean_top_eig(m):
@@ -227,9 +227,16 @@ def gel(graph, k, tol):
     num_edges = min(k + d_out, graph.size()) # do not take more edges than exist
     J = np.argsort(u)
 
-    # 5. index by P the set of all edges e=(i,j), i∈I, j∈J with A(i,j)=0
+    # # 5. index by P the set of all edges e=(i,j), i∈I, j∈J with A(i,j)=0
+    # P = [(i, j) for i in I for j in J
+    #      if abs(A[i, j]) < 1e-5  # add only if they are not already neighbors
+    #      and i != j              # don't add self-loops
+    # ]
+
+    # Here we depart from Algorithm 2, because we only want to increase the
+    # weight of existent edges.
     P = [(i, j) for i in I for j in J
-         if abs(A[i, j]) < 1e-5  # add only if they are not already neighbors
+         if abs(A[i, j]) > 0     # add only if they are already neighbors
          and i != j              # don't add self-loops
     ]
 
@@ -254,7 +261,7 @@ def melt_gel(
         budget_edges=None,
         budget_eig=None,
         weighted=True,
-        discount_factor=0.9,
+        discount_factor=0.5,
         milestones=None,
 ):
     """Use NetMelt and NetGel to attack the graph spectrum.
@@ -342,7 +349,8 @@ def melt_gel(
             attacked.edges[edge]['weight'] /= discount_factor
 
     else:
-        tol = np.percentile([graph.edges[e]['weight'] for e in graph.edges], 25)
+        # tol = np.percentile([graph.edges[e]['weight'] for e in graph.edges], 25)
+        tol = np.percentile([graph.edges[e]['weight'] for e in graph.edges], 10)
         to_add = gel(target, target_budget)
         to_rem = melt(outside_target, outside_budget, tol)
         attacked.add_edges_from(to_add)
@@ -397,13 +405,17 @@ def max_absent_edge(graph, tol, cent='deg', weighted=False):
         return max(cent_dict, key=cent_dict.get) if cent_dict else None
 
 
-def max_edge(graph, tol, cent='deg', weighted=False):
+def max_edge(graph, lower_tol, upper_tol, cent='deg', weighted=False):
     """Return the edge with the maximum centrality.
 
     Parameters
     ----------
 
     graph (nx.Graph): the graph to analyze
+
+    lower_tol (float): ignore edges whose weight is less than this
+
+    upper_tol (float): ignore edges whose weight is more than this
 
     cent (str): one of 'deg' or 'bet'
 
@@ -422,7 +434,8 @@ def max_edge(graph, tol, cent='deg', weighted=False):
             # edge for a long time.  To avoid that, just focus on edges with
             # high weight.
             if weighted:
-                if graph.edges[e]['weight'] < tol:
+                if (graph.edges[e]['weight'] < lower_tol
+                    or graph.edges[e]['weight'] > upper_tol):
                     continue
 
             if deg[e[0]] + deg[e[1]] > cur_max:
@@ -447,7 +460,7 @@ def centrality_attack(
         budget_eig=None,
         cent='deg',
         weighted=False,
-        discount_factor=0.9,
+        discount_factor=0.5,
         milestones=None
 ):
     """Use edge centrality to attack the graph spectrum.
@@ -520,31 +533,37 @@ def centrality_attack(
     # Toggle between adding ('add') and removing ('rem') edges
     mode = 'add'
 
-    # get_edge_to_add must return a non-existing edge outside of the target
-    # subgraph that will be added.  get_edge_to_rem must return an existing
-    # edge inside of the target subgraph that will be removed.  Most of the
-    # time we will choose them like this...
+    # get_edge_to_add must return an edge inside of the target subgraph that
+    # will be added (or its weight increased).  get_edge_to_rem must return an
+    # existing edge outside of the target subgraph that will be removed (or
+    # have its weight decreased).
     if weighted:
-        all_weights = [outside_target.edges[e]['weight'] for e in outside_target.edges]
-        lower_tol = np.percentile(all_weights, 25)
-        upper_tol = np.percentile(all_weights, 75)
+        perc = lambda g, p: np.percentile([g.edges[e]['weight'] for e in g.edges], p)
+
+        if cent == 'gel':
+            if budget_eig:
+                lower_tol = perc(outside_target, 10)
+                upper_tol = perc(target, 90)
+                get_edge_to_add = lambda: (gel(target, 1, upper_tol) or [[]])[0]
+                get_edge_to_rem = lambda: (melt(outside_target, 1, lower_tol) or [[]])[0]
+            else:
+                print('If you want to use NetGel with a budget given '
+                      'by a number of edges, use melt_gel() instead.')
+                return
+        elif cent == 'deg':
+            # get_edge_to_add = lambda: max_absent_edge(target, upper_tol, cent=cent, weighted=True)
+            get_edge_to_add = lambda: max_edge(
+                target, perc(target, 10), perc(target, 90), cent=cent, weighted=True)
+            get_edge_to_rem = lambda: max_edge(
+                outside_target, perc(outside_target, 10), perc(outside_target, 90), cent=cent, weighted=True)
+
+        # Initial weight to use when adding a new edge
+        init_weight = np.median([d['weight'] for _, _, d in graph.edges(data=True)])
+
     else:
         lower_tol, upper_tol = float('-inf'), float('inf')
-    get_edge_to_add = lambda: max_absent_edge(target, upper_tol, cent=cent, weighted=weighted)
-    get_edge_to_rem = lambda: max_edge(outside_target, lower_tol, cent=cent, weighted=weighted)
-    # ... except when the centrality is 'gel'
-    if cent == 'gel':
-        if budget_eig:
-            get_edge_to_add = lambda: (gel(target, 1, upper_tol) or [[]])[0]
-            get_edge_to_rem = lambda: (melt(outside_target, 1, lower_tol) or [[]])[0]
-        else:
-            print('If you want to use NetGel with a budget given '
-                  'by a number of edges, use melt_gel() instead.')
-            return
-
-    # Initial weight to use when adding a new edge
-    if weighted:
-        init_weight = np.median([d['weight'] for _, _, d in graph.edges(data=True)])
+        get_edge_to_add = lambda: max_absent_edge(target, upper_tol, cent=cent, weighted=False)
+        get_edge_to_rem = lambda: max_edge(outside_target, lower_tol, cent=cent, weighted=False)
 
     if milestones:
         all_attacked = []
@@ -588,6 +607,7 @@ def centrality_attack(
                 print(f'add: ({edge[0]:02d}, {edge[1]:02d}).', end='')
                 if weighted:
                     if not attacked.has_edge(*edge):
+                        print('we shouldn\'t be here')
                         attacked.add_edge(*edge, weight=init_weight)
                     else:
                         attacked.edges[edge]['weight'] /= discount_factor

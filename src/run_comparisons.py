@@ -6,6 +6,7 @@ Run the functions implemented in comparisons.py on our datasets.
 
 """
 
+import sys
 import numpy as np
 from scipy import sparse
 import networkx as nx
@@ -40,35 +41,51 @@ def run_all(graph, target, name, weighted, discount_factor=None):
         print(f'There are {zero} nodes with degree zero in {fn}')
         write_output(att, fn)
 
-    # all_attacked = melt_gel(
-    #     graph,
-    #     target,
-    #     budget_eig=budget,
-    #     weighted=weighted,
-    #     discount_factor=discount_factor,
-    #     milestones=[0.1*eig, 0.2*eig, 0.3*eig, 0.4*eig, 0.5*eig],
-    # )
-    # for att, gamma in zip(all_attacked, [0.1, 0.2, 0.3, 0.4, 0.5]):
-    #     fn = 'comparison_results/{}_{}_{}.edges'.format(name, 'gel', gamma)
-    #     zero = Counter(dict(att.degree()).values())[0]
-    #     print(f'There are {zero} nodes with degree zero in {fn}')
-    #     write_output(att, fn)
+    all_attacked = melt_gel(
+        graph,
+        target,
+        budget_eig=budget,
+        weighted=weighted,
+        discount_factor=discount_factor,
+        milestones=[0.1*eig, 0.2*eig, 0.3*eig, 0.4*eig, 0.5*eig],
+    )
+    for att, gamma in zip(all_attacked, [0.1, 0.2, 0.3, 0.4, 0.5]):
+        fn = 'comparison_results/{}_{}_{}.edges'.format(name, 'gel', gamma)
+        zero = Counter(dict(att.degree()).values())[0]
+        print(f'There are {zero} nodes with degree zero in {fn}')
+        write_output(att, fn)
 
 
-def main():
+def main(name):
     """Load data sets and run baselines."""
+
+    # Email and brain were run with discount_factor=0.5, upper_tol = 75%,
+    # lower_tol = 25%.
     # print('email')
     # graph, target = read_data('Email')
     # run_all(graph, target, 'email', weighted=False)
+    # print('brain')
+    # graph, target = read_data('Brain')
+    # run_all(graph, target, 'brain', weighted=True, discount_factor=0.5)
 
-    print('brain')
-    graph, target = read_data('Brain')
-    run_all(graph, target, 'brain', weighted=True, discount_factor=0.5)
-
+    # Airport was run with discount_factor=0.1, upper_tol = 90%,
+    # lower_tol = 10%.
     # print('airport')
     # graph, target = read_data('Airport')
-    # run_all(graph, target, 'airport', weighted=True, discount_factor=0.5)
+    # run_all(graph, target, 'airport', weighted=True, discount_factor=0.1)
+
+
+    if name == 'email':
+        graph, target = read_data('Email')
+        run_all(graph, target, 'email', weighted=False)
+    elif name == 'brain':
+        graph, target = read_data('Brain')
+        run_all(graph, target, 'brain', weighted=True, discount_factor=0.5)
+    elif name == 'airport':
+        graph, target = read_data('Airport')
+        run_all(graph, target, 'airport', weighted=True, discount_factor=0.1)
+
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1])

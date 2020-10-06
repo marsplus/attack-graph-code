@@ -38,10 +38,10 @@ args = parser.parse_args()
 
 GAMMA = args.gamma                       # recovery rate
 TAU = args.tau                           # transmission rate
-TMAX = 50
+TMAX = 100
 numCPU = 7
 LOC = args.location
-numSim = 2000
+numSim = 500
 MODE = 'min_eigcent_SP'
 
 
@@ -66,9 +66,12 @@ def run_sis(original, attacked, budget, num_sim=numSim):
             else:
                 sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
             
-            ## average results over the last 20 steps
-            inf_ratio_target    = np.mean([Counter(sim.get_statuses(S, i).values())['I'] / len(S) for i in range(-1, -21, -1)])
-            inf_ratio_bystander = np.mean([Counter(sim.get_statuses(SP, i).values())['I'] / len(SP) for i in range(-1, -21, -1)])
+            ## average results over the last 10 steps
+            inf_ratio_target    = np.mean([Counter(sim.get_statuses(S, i).values())['I'] / len(S) for i in range(-1, -11, -1)])
+            #INF = [Counter(sim.get_statuses(S, i).values())['I'] / len(S) for i in range(TMAX)] 
+            #with open('tmp.p', 'wb') as fid:
+            #    pickle.dump(INF, fid)
+            inf_ratio_bystander = np.mean([Counter(sim.get_statuses(SP, i).values())['I'] / len(SP) for i in range(-1, -11, -1)])
             rows.append((name, inf_ratio_target, inf_ratio_bystander, budget))
     
     return pd.DataFrame(rows, columns=['graph', 'ratio targets', 'ratio bystanders', 'budget'])
@@ -79,8 +82,11 @@ def dispatch(params):
     Key = params
     print("Current exp: {}".format(Key))
 
-    #attackedData = '../result/{}/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(W, MODE, args.graph_type, args.numExp, Key)
-    attackedData = '../result/{}/{}/{}_numExp_{}_attacked_graphs_{}_{}.p'.format(args.weighted, MODE, args.graph_type, args.numExp, Key, args.algo)
+    if args.algo == 'ours':
+        attackedData = '../result/{}/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(args.weighted, MODE, args.graph_type, args.numExp, Key)
+    else:
+        attackedData = '../result/{}/{}/{}_numExp_{}_attacked_graphs_{}_{}.p'.format(args.weighted, MODE, args.graph_type, args.numExp, Key, args.algo)
+
     with open(attackedData, 'rb') as fid:
         graph_ret = pickle.load(fid)
 
@@ -107,15 +113,21 @@ for Key in expName:
 
 ret = pool.map(dispatch, params)
 
-#folder = '../result/{}/{}/{}-SIS/Gamma-{:.2f}---Tau-{:.2f}/'.format(args.weighted, MODE, args.graph_type, GAMMA, TAU)
-folder = '../comparison_results/'
+if args.algo == 'ours':
+    folder = '../result/{}/{}/{}-SIS/Gamma-{:.2f}---Tau-{:.2f}/'.format(args.weighted, MODE, args.graph_type, GAMMA, TAU)
+else:
+    folder = '../comparison_results/'
+
 if not os.path.exists(folder):
     os.mkdir(folder)
 
 for idx, Key in enumerate(expName):
     result = ret[idx]
-    #fileName = '{}_numExp_{}_SIS_{}.p'.format(args.graph_type, args.numExp, Key) 
-    fileName = '{}_{}.p'.format(args.graph_type, args.algo)
+    if args.algo == 'ours':
+        fileName = '{}_numExp_{}_SIS_{}.p'.format(args.graph_type, args.numExp, Key) 
+    else:
+        fileName = '{}_{}.p'.format(args.graph_type, args.algo)
+
     with open(os.path.join(folder, fileName), 'wb') as fid:
         pickle.dump(result, fid)
 

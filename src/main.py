@@ -267,7 +267,6 @@ if __name__ == '__main__':
             S = select_comm(G, args.graph_type, mapping)
         else:
             S = select_comm(G, args.graph_type)
-        print(S)
         print("---Comm size: {}    Graph size: {}---".format(len(S), len(G)))
 
         S_prime = list(set(G.nodes()) - set(S))

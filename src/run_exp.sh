@@ -15,6 +15,7 @@
   #numExp=$2
   #weighted=$3
   #save=$4
+  #python main.py --graph_type=$graph_type --mode=721 --numExp=$numExp --weighted=$weighted --save_result=$save
   #python main.py --graph_type=$graph_type --mode=equalAlpha --numExp=$numExp --weighted=$weighted --save_result=$save
   #python main.py --graph_type=$graph_type --mode=alpha1=1   --numExp=$numExp --weighted=$weighted --save_result=$save
   #python main.py --graph_type=$graph_type --mode=alpha2=0   --numExp=$numExp --weighted=$weighted --save_result=$save
@@ -22,6 +23,7 @@
 
 graph_type=Brain
 numExp=1
+python sis_simulations.py --graph_type=$graph_type  --numExp=$numExp --gamma=0.24 --tau=0.2 --weighted=weighted --algo=ours
 python sis_simulations.py --graph_type=$graph_type  --numExp=$numExp --gamma=0.24 --tau=0.2 --weighted=weighted --algo=deg
 python sis_simulations.py --graph_type=$graph_type  --numExp=$numExp --gamma=0.24 --tau=0.2 --weighted=weighted --algo=gel
 
