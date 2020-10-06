@@ -51,7 +51,6 @@ def main():
 
 
 
-    is it only adding _new_ edges?
 
 
 

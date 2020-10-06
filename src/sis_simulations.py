@@ -28,8 +28,11 @@ parser.add_argument('--gamma', type=float, default='0.24',
                 help='gamma')
 parser.add_argument('--tau', type=float, default='0.2',
                 help='tau')
-parser.add_argument('--weighted', type=int, default=1,
+parser.add_argument('--weighted', type=str, default='weighted',
                     help='whether the graph is weighted')
+parser.add_argument('--algo', type=str, default='deg',
+                    help='which attack algorithm we are comparing with')
+
 args = parser.parse_args()
 
 
@@ -57,14 +60,11 @@ def run_sis(original, attacked, budget, num_sim=numSim):
             
             S = [i for i in range(numNode) if G.nodes[i]['target']]
             SP = list(set(range(numNode)) - set(S))
-
-            if name == 'attacked':
-                sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
+            
+            if args.graph_type not in ['Airport', 'Protein', 'Brain']:
+                sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
             else:
-                if args.graph_type not in ['Airport', 'Protein', 'Brain']:
-                    sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, return_full_data=True)
-                else:
-                    sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
+                sim = EoN.fast_SIS(graphs[name], TAU, GAMMA, tmax=TMAX, transmission_weight='weight', return_full_data=True)
             
             ## average results over the last 20 steps
             inf_ratio_target    = np.mean([Counter(sim.get_statuses(S, i).values())['I'] / len(S) for i in range(-1, -21, -1)])
@@ -77,10 +77,11 @@ def run_sis(original, attacked, budget, num_sim=numSim):
 
 def dispatch(params):
     Key = params
-    W = 'weighted' if args.weighted else 'unweighted'
     print("Current exp: {}".format(Key))
 
-    with open('../result/{}/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(W, MODE, args.graph_type, args.numExp, Key), 'rb') as fid:
+    #attackedData = '../result/{}/{}/{}_numExp_{}_attacked_graphs_{}.p'.format(W, MODE, args.graph_type, args.numExp, Key)
+    attackedData = '../result/{}/{}/{}_numExp_{}_attacked_graphs_{}_{}.p'.format(args.weighted, MODE, args.graph_type, args.numExp, Key, args.algo)
+    with open(attackedData, 'rb') as fid:
         graph_ret = pickle.load(fid)
 
     result = []
@@ -99,20 +100,22 @@ def dispatch(params):
 
 pool = Pool(processes=numCPU)
 params = []
-expName = ['equalAlpha', 'alpha1=1', 'alpha2=0', 'alpha3=1']
+#expName = ['equalAlpha', 'alpha1=1', 'alpha2=0', 'alpha3=1']
+expName = ['equalAlpha']
 for Key in expName:
     params.append(Key)
 
 ret = pool.map(dispatch, params)
 
-W = 'weighted' if args.weighted else 'unweighted'
-folder = '../result/{}/{}/{}-SIS/Gamma-{:.2f}---Tau-{:.2f}/'.format(W, MODE, args.graph_type, GAMMA, TAU)
+#folder = '../result/{}/{}/{}-SIS/Gamma-{:.2f}---Tau-{:.2f}/'.format(args.weighted, MODE, args.graph_type, GAMMA, TAU)
+folder = '../comparison_results/'
 if not os.path.exists(folder):
     os.mkdir(folder)
 
 for idx, Key in enumerate(expName):
     result = ret[idx]
-    fileName = '{}_numExp_{}_SIS_{}.p'.format(args.graph_type, args.numExp, Key) 
+    #fileName = '{}_numExp_{}_SIS_{}.p'.format(args.graph_type, args.numExp, Key) 
+    fileName = '{}_{}.p'.format(args.graph_type, args.algo)
     with open(os.path.join(folder, fileName), 'wb') as fid:
         pickle.dump(result, fid)
 

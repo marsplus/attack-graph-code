@@ -6,12 +6,9 @@ import torch
 def power_method(mat, Iter=50, output_format='tensor'):
     """
         mat: input matrix, the default format is tensor in PyTorch.
-             Numpy array can also be handled
         Iter: #iterations to estimate the leading eigenvector
         output_format: set this to 'array' if the output should be in numpy array
     """
-    if type(mat) != torch.Tensor:
-        mat = torch.tensor(mat, dtype=torch.float32)
 
     if mat.sum() == 0:
         return torch.zeros(len(mat))
@@ -59,7 +56,7 @@ def estimate_sym_specNorm(mat, Iter=50, numExp=20):
         u = power_method(-M, Iter)
         spec_norm += torch.max( torch.abs(v @ M @ v), torch.abs(u @ (-M) @ u) )
     spec_norm /= numExp
-    return spec_norm.item()
+    return spec_norm
 
 
 def get_submatrix(mat, row_idx, col_idx):

@@ -98,8 +98,6 @@ def gen_graph(graph_type, graph_id=1):
         comps = nx.connected_components(G)
         comp_max_idx = max(comps, key=lambda x: len(x))
         G = G.subgraph(comp_max_idx)
-        mapping = {item: idx for idx, item in enumerate(G.nodes())}
-        G = nx.relabel_nodes(G, mapping)
     return G
 
 
@@ -269,7 +267,7 @@ if __name__ == '__main__':
             S = select_comm(G, args.graph_type, mapping)
         else:
             S = select_comm(G, args.graph_type)
-
+        print(S)
         print("---Comm size: {}    Graph size: {}---".format(len(S), len(G)))
 
         S_prime = list(set(G.nodes()) - set(S))
