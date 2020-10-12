@@ -1,0 +1,3 @@
+BA 0.0657
+Small-World 0.0332
+BTER 0.0585
